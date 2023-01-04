@@ -1,0 +1,111 @@
+---
+title: "Make prediction grid"
+author: "Max Lindmark"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+  df_print: paged
+pdf_document: default
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include = FALSE, cache=FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 12,
+  fig.asp = 0.618,
+  fig.align ='center'
+)
+```
+
+```{r}
+# https://github.com/pbs-assess/gfvelocities/blob/main/R/make_prediction_grid.R
+
+library(tidyverse)
+library(tidylog)
+library(sp)
+library(raster)
+
+# Source code for map plots
+# change to url once we have the final one
+source("/Users/maxlindmark/Dropbox/Max work/R/marine-litter/R/functions/map-plot.R")
+
+# Read west coast data
+litterw <- read_csv("data/clean_west_coast_litter.csv")
+
+x <- litterw$X
+y <- litterw$Y
+
+z <- chull(x, y)
+
+coords <- cbind(x[z], y[z])
+coords <- rbind(coords, coords[1, ])
+
+plot(coords[, 1] ~ coords[, 2]) # plot data
+
+sp_poly <- sp::SpatialPolygons(
+  list(sp::Polygons(list(sp::Polygon(coords)), ID = 1))
+  )
+
+sp_poly_df <- sp::SpatialPolygonsDataFrame(sp_poly,
+                                           data = data.frame(ID = 1)
+                                           )
+class(sp_poly_df)
+class(sp_poly)
+
+plot(sp_poly)
+plot(sp_poly_df)
+
+cell_width <- 2 # 2*2 km grid cell
+
+pred_grid <- expand.grid(
+  X = seq(min(litterw$X), max(litterw$X), cell_width),
+  Y = seq(min(litterw$Y), max(litterw$Y), cell_width),
+  year = unique(litterw$year)
+  )
+
+sp::coordinates(pred_grid) <- c("X", "Y")
+
+inside <- !is.na(sp::over(pred_grid, as(sp_poly_df, "SpatialPolygons")))
+
+pred_grid <- pred_grid[inside, ]
+
+pred_grid <- as.data.frame(pred_grid)
+
+plot_map_west +
+  geom_point(data = pred_grid, aes(X*1000, Y*1000), size = 0.001, alpha = 0.5) +
+  facet_wrap(~year, ncol = 5) +
+  geom_sf(size = 0.1) +
+  NULL
+```
+
+Add depth
+
+```{r}
+# Read the tifs
+west <- raster("data/depth_geo_tif/D5_2018_rgb-1.tif")
+#plot(west)
+
+east <- raster("data/depth_geo_tif/D6_2018_rgb-1.tif")
+# plot(east)
+
+dep_rast <- raster::merge(west, east)
+
+# Reproject the raster to fit the UTM pred grid... Define spatial reference 
+sr <- "+proj=utm +zone=33  +datum=WGS84 +units=m " 
+
+projected_raster <- projectRaster(dep_rast, crs = sr)
+
+pred_grid$depth <- extract(projected_raster, pred_grid %>% dplyr::select(X, Y) %>% mutate(X = X*1000, Y = Y*1000))
+
+# Convert to depth (instead of elevation)
+ggplot(pred_grid, aes(depth)) + geom_histogram()
+#> `stat_bin()` using `bins = 30`. Pick better value with `binwidth`.
+```
+
+```{r}
+# Save
+write_csv(pred_grid, "data/pred_grid_west.csv")
+```

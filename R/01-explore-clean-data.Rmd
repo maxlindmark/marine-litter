@@ -1,0 +1,303 @@
+---
+title: "Explore and clean marine litter data"
+author: "Max Lindmark"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+  df_print: paged
+pdf_document: default
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include = FALSE, cache=FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 12,
+  fig.asp = 0.618,
+  fig.align ='center'
+)
+```
+
+```{r load libraries, message=FALSE, warning=TRUE}
+# Load libraries, install if needed
+library(tidyverse)
+library(tidylog)
+library(RCurl)
+library(RColorBrewer)
+library(devtools)
+library(sp)
+library(viridis)
+library(raster)
+
+# Source code for map plots
+# change to url once we have the final one
+source("/Users/maxlindmark/Dropbox/Max work/R/marine-litter/R/functions/map-plot.R")
+
+# Source utm function
+source_url("https://raw.githubusercontent.com/maxlindmark/marine-litter/main/R/functions/lon-lat-utm.R")
+
+# Continuous colors
+options(ggplot2.continuous.colour = "viridis")
+
+# Discrete colors
+scale_colour_discrete <- function(...) {
+  scale_colour_brewer(palette = "Dark2")
+}
+
+scale_fill_discrete <- function(...) {
+  scale_fill_brewer(palette = "Dark2")
+}
+```
+
+# Read and clean data
+
+```{r}
+w <- read_csv("data/ibts_agg_2013_2022_no_size.csv")
+b <- read_csv("data/bits_agg_2013_2022_no_size.csv")
+  
+glimpse(w)
+glimpse(b)  
+
+# Merge data
+d <- bind_rows(w %>% mutate(area = "west"),
+               b %>% mutate(area = "baltic")) %>% 
+  ungroup()
+
+unique(d$gruppnamn_ny)
+unique(d$sup_fishery_other)
+
+# Create midpoint lat and lon
+d <- d %>% mutate(lat = (lat_start_dec + lat_stop_dec) / 2,
+                  lon = (long_start_dec + long_stop_dec) / 2)
+
+glimpse(d)
+
+# Convert to UTM coords
+d$X <- LongLatToUTM(d$lon, d$lat, zone = 33)$X / 1000 # km for computational reasons
+d$Y <- LongLatToUTM(d$lon, d$lat, zone = 33)$Y / 1000 # km for computational reasons
+
+d <- d %>%
+  filter(lat > 54 & lon > 2 & lon < 21 & lat < 59) %>%
+  drop_na(X, Y)
+
+# Create haul_id (we want to aggregate data per haul)
+d$haul_id <- paste(d$Year, d$Quarter, d$StNo, d$HaulNo, round(d$lat, digits = 1), round(d$lon, digits = 1), sep = "_")
+```
+
+Aggregate data (biomass density)
+
+```{r}
+# We want to fit models by "gruppnamn". We want to re-arrange the data so that the levels in gruppnamn are columns. First we also need to sum the weights/abundances across all "kategori" within a gruppnamn, because there are multiple
+
+d_litter <- d %>% 
+  group_by(haul_id, gruppnamn_ny) %>% 
+  summarise(weight_litter_per_km2_kg_tot = sum(weight_litter_per_km2_kg))
+
+head(d_litter)
+
+# Do the same for fishery-related plastics
+d_sup <- d %>% 
+  group_by(haul_id, sup_fishery_other) %>% 
+  summarise(weight_litter_per_km2_kg_tot = sum(weight_litter_per_km2_kg))
+
+head(d_litter)
+head(d_sup)
+
+# Now I want to pivot wider so that each level gruppnamn_ny is a column. 
+d_litter2 <- d_litter %>%
+  pivot_wider(names_from = gruppnamn_ny,
+              values_from = weight_litter_per_km2_kg_tot,
+              values_fill = 0)
+d_sup2 <- d_sup %>%
+  pivot_wider(names_from = sup_fishery_other,
+              values_from = weight_litter_per_km2_kg_tot,
+              values_fill = 0)
+
+d_litter2
+d_sup2
+
+# Compare a haul
+# haul_ids <- unique(d$haul_id)
+# test_id <- haul_ids[75]
+# 
+# d %>% filter(haul_id == test_id) %>% as.data.frame()
+# d_litter %>% filter(haul_id == test_id)
+# d_litter2 %>% filter(haul_id == test_id)
+
+# We can now drop "inget" column
+d_litter2 <- d_litter2 %>% dplyr::select(-Inget)
+
+d_sup2 <- d_sup2 %>% dplyr::select(SUP, FISHERY, haul_id)
+
+# Now we have the sum of all weights/abundances for each gruppnamn. Select key columns from the full data set and left_join
+d_sel <- d %>%
+  dplyr::select(Quarter, StNo, HaulNo, Year, lat, lon, X, Y, ANSSE_area, BALSE_area, trend_area, haul_id, swept_area_km2) %>% distinct(haul_id, .keep_all = TRUE)
+  
+litter <- left_join(d_litter2, d_sel)
+
+# Add in the sups into the litter data frame to have it all in one place
+litter <- left_join(litter, d_sup2) %>% 
+  janitor::clean_names() %>% 
+  rename(X = x, Y = y) %>% 
+  ungroup()
+```
+
+Aggregate data (number density)
+
+```{r}
+# We want to fit models by "gruppnamn". We want to re-arrange the data so that the levels in gruppnamn are columns. First we also need to sum the weights/abundances across all "kategori" within a gruppnamn, because there are multiple
+
+d_litter_no <- d %>% 
+  group_by(haul_id, gruppnamn_ny) %>% 
+  summarise(no_litter_per_km2_tot = sum(no_litter_per_km2))
+
+head(d_litter_no)
+
+# Do the same for fishery-related plastics
+d_sup_no <- d %>% 
+  group_by(haul_id, sup_fishery_other) %>% 
+  summarise(no_litter_per_km2_tot = sum(no_litter_per_km2))
+
+head(d_litter_no)
+head(d_sup_no)
+
+# Now I want to pivot wider so that each level gruppnamn_ny is a column. 
+d_litter2_no <- d_litter_no %>%
+  pivot_wider(names_from = gruppnamn_ny,
+              values_from = no_litter_per_km2_tot,
+              values_fill = 0)
+
+d_sup2_no <- d_sup_no %>%
+  pivot_wider(names_from = sup_fishery_other,
+              values_from = no_litter_per_km2_tot,
+              values_fill = 0)
+
+d_litter2_no
+d_sup2_no
+
+# Compare a haul
+# haul_ids <- unique(d$haul_id)
+# test_id <- haul_ids[75]
+ 
+# d %>% filter(haul_id == test_id) %>% as.data.frame()
+# d_litter %>% filter(haul_id == test_id)
+# d_litter2 %>% filter(haul_id == test_id)
+
+# We can now drop "inget" column
+d_litter2_no <- d_litter2_no %>% dplyr::select(-Inget)
+
+d_sup2_no <- d_sup2_no %>% dplyr::select(SUP, FISHERY, haul_id)
+
+# Now we have the sum of all weights/abundances for each gruppnamn. Select key columns from the full data set and left_join
+d_sel_no <- d %>%
+  dplyr::select(Quarter, StNo, HaulNo, Year, lat, lon, X, Y, ANSSE_area, BALSE_area, trend_area, haul_id, swept_area_km2) %>% distinct(haul_id, .keep_all = TRUE)
+
+litter_no <- left_join(d_litter2_no, d_sel_no)
+
+# Add in the sups into the litter data frame to have it all in one place
+litter_no <- left_join(litter_no, d_sup2_no) %>% 
+  janitor::clean_names() %>% 
+  rename(X = x, Y = y) %>% 
+  ungroup()
+
+filter(litter_no, haul_id == "2015_1_57_16_57.9_11") %>% as.data.frame()
+
+```
+
+```{r merge data}
+dat <- bind_rows(litter %>% mutate(var = "biomass_density"),
+                 litter_no %>% mutate(var = "numbers_density"))
+```
+
+```{r}
+filter(dat, haul_id == "2015_1_57_16_57.9_11") %>% as.data.frame()
+```
+
+Add depth
+
+```{r}
+# Read the tifs
+west <- raster("data/depth_geo_tif/D5_2018_rgb-1.tif")
+#plot(west)
+
+east <- raster("data/depth_geo_tif/D6_2018_rgb-1.tif")
+# plot(east)
+
+dep_rast <- raster::merge(west, east)
+
+dat$depth <- extract(dep_rast, dat %>% dplyr::select(lon, lat))
+
+# Convert to depth (instead of elevation)
+ggplot(dat, aes(depth)) + geom_histogram()
+#> `stat_bin()` using `bins = 30`. Pick better value with `binwidth`.
+
+dat <- dat %>% filter(depth > 0)
+```
+
+Plot all data
+
+```{r plot all data}
+# Plotting litter data
+# Plot
+plot_map + 
+  geom_point(data = litter, aes(X*1000, Y*1000, color = trend_area)) +
+  geom_sf(size = 0.1) + 
+  facet_wrap(~year, ncol = 3) +
+  NULL
+```
+
+# West coast data
+
+```{r}
+# For the west coast, our main area is in red (ANS-SE-SR-Nordsjon)... but some purple areas are really close and I think we should use them too. I suggest we filter data like this:
+litterw <- dat %>%
+  mutate(keep = ifelse(lon > 10.18, "Y", "N"),
+         keep = ifelse(lat < 56.5 & lon < 11.5, "N", keep)) %>% 
+  filter(keep == "Y") %>% 
+  filter(lon < 13) %>% 
+  dplyr::select(-keep)
+
+plot_map_west + 
+  geom_point(data = litterw, aes(X*1000, Y*1000, color = trend_area)) +
+  geom_sf(size = 0.1) +  
+  facet_wrap(~year, ncol = 5) +
+  NULL
+
+# Plot proportion zero by litter category and year
+litterw %>% 
+  mutate(diverse_pa = ifelse(diverse == 0, "0", "1"),
+         naturmaterial_pa = ifelse(naturmaterial == 0, "0", "1"),
+         plast_pa = ifelse(plast == 0, "0", "1"),
+         metall_pa = ifelse(metall == 0, "0", "1"),
+         glas_pa = ifelse(glas == 0, "0", "1"),
+         gummi_pa = ifelse(gummi == 0, "0", "1"),
+         sup_pa = ifelse(sup == 0, "0", "1"),
+         fishery_pa = ifelse(fishery == 0, "0", "1")) %>% 
+  pivot_longer(c(diverse_pa, naturmaterial_pa, plast_pa, metall_pa, 
+                 glas_pa, gummi_pa, sup_pa, fishery_pa)) %>% 
+  ggplot(aes(x = year, fill = value)) + 
+  geom_bar() + 
+  facet_wrap(~ name, ncol = 4) + 
+  theme_plot() +
+  theme(axis.text.x = element_text(angle = 90))
+ 
+# Plot response variables (start with plastic)
+plot_map_west + 
+  geom_point(data = litterw, aes(X*1000, Y*1000, color = plast)) +
+  geom_sf(size = 0.1) +
+  scale_color_viridis(trans = "sqrt") +
+  facet_wrap(~year, ncol = 5) +
+  NULL
+
+ggplot(litterw, aes(plast)) + 
+  geom_histogram()
+```
+
+# Save data
+
+```{r}
+write_csv(litterw %>% filter(var == "biomass_density"), "data/west_coast_litter_biomass.csv")
+write_csv(litterw %>% filter(var == "numbers_density"), "data/west_coast_litter_numbers.csv")
+```

@@ -1,0 +1,205 @@
+---
+title: "Simulate spatial data and test spatial autocorrelations"
+author: "Max Lindmark"
+date: "2023-01-03"
+output: html_document
+---
+
+```{r}
+library(sdmTMB)
+library(dplyr)
+library(patchwork)
+library(ggplot2); theme_set(theme_light())
+```
+
+```{r simulate data}
+set.seed(123)
+
+predictor_dat <- data.frame(
+  X = runif(300), Y = runif(300),
+  year = 1
+)
+
+mesh <- make_mesh(predictor_dat,
+                  xy_cols = c("X", "Y"),
+                  cutoff = 0.1
+                  
+)
+
+sim_dat_1 <- sdmTMB_simulate(
+  formula = ~1,
+  data = predictor_dat,
+  time = "year",
+  mesh = mesh,
+  family = gaussian(link = "identity"),
+  range = 0.00001,
+  sigma_E = 0.1,
+  phi = 0.01,
+  sigma_O = 0.01,
+  seed = 3542,
+  B = c(0) # B0 = intercept
+)
+
+sim_dat_2 <- sdmTMB_simulate(
+  formula = ~1,
+  data = predictor_dat,
+  time = "year",
+  mesh = mesh,
+  family = gaussian(link = "identity"),
+  range = 0.00025,
+  sigma_E = 0.1,
+  phi = 0.001,
+  sigma_O = 0.01,
+  seed = 3542,
+  B = c(0) # B0 = intercept
+)
+
+sim_dat_3 <- sdmTMB_simulate(
+  formula = ~1,
+  data = predictor_dat,
+  time = "year",
+  mesh = mesh,
+  family = gaussian(link = "identity"),
+  range = 0.0005,
+  sigma_E = 0.1,
+  phi = 0.001,
+  sigma_O = 0.01,
+  seed = 3542,
+  B = c(0) # B0 = intercept
+)
+
+sim_dat_4 <- sdmTMB_simulate(
+  formula = ~1,
+  data = predictor_dat,
+  time = "year",
+  mesh = mesh,
+  family = gaussian(link = "identity"),
+  range = 0.01,
+  sigma_E = 0.1,
+  phi = 0.01,
+  sigma_O = 0.01,
+  seed = 3542,
+  B = c(0) # B0 = intercept
+)
+```
+
+
+```{r plot}
+p1 <- ggplot(sim_dat_1, aes(X, Y, col = observed)) +
+  geom_point(alpha=0.7, size=3) + 
+  guides(col=guide_legend(title="Residuals")) +
+  scale_color_gradient2() + 
+  ggtitle("range = 0.00001")
+
+p2 <- ggplot(sim_dat_2, aes(X, Y, col = observed)) +
+  geom_point(alpha=0.7, size=3) + 
+  guides(col=guide_legend(title="Residuals")) +
+  scale_color_gradient2() + 
+  ggtitle("range = 0.00025")
+
+p3 <- ggplot(sim_dat_3, aes(X, Y, col = observed)) +
+  geom_point(alpha=0.7, size=3) + 
+  guides(col=guide_legend(title="Residuals")) +
+  scale_color_gradient2() + 
+  ggtitle("range = 0.0005")
+
+p4 <- ggplot(sim_dat_4, aes(X, Y, col = observed)) +
+  geom_point(alpha=0.7, size=3) + 
+  guides(col=guide_legend(title="Residuals")) +
+  scale_color_gradient2() + 
+  ggtitle("range = 0.01")
+
+p1 + p2 + p3 + p4 + plot_layout(guides = "auto")
+```
+
+Fit models
+
+```{r}
+fit1 <- sdmTMB(observed ~ 1, data = sim_dat_1, family = gaussian(), mesh = mesh, spatial = "off", spatiotemporal = "off")
+#sanity(fit1)
+
+fit2 <- sdmTMB(observed ~ 1, data = sim_dat_2, family = gaussian(), mesh = mesh, spatial = "off", spatiotemporal = "off",
+               control = sdmTMBcontrol(newton_loops = 2))
+#sanity(fit2)
+
+fit3 <- sdmTMB(observed ~ 1, data = sim_dat_3, family = gaussian(), mesh = mesh, spatial = "off", spatiotemporal = "off",
+               control = sdmTMBcontrol(newton_loops = 2))
+#sanity(fit3)
+
+fit4 <- sdmTMB(observed ~ 1, data = sim_dat_4, family = gaussian(), mesh = mesh, spatial = "off", spatiotemporal = "off",
+               control = sdmTMBcontrol(newton_loops = 2))
+#sanity(fit4)
+```
+
+Simulate residuals
+
+```{r}
+s_1 <- simulate(fit1, nsim = 500)
+s_2 <- simulate(fit2, nsim = 500)
+s_3 <- simulate(fit3, nsim = 500)
+s_4 <- simulate(fit4, nsim = 500)
+
+pred_fixed_1 <- predict(fit1)$est_non_rf
+pred_fixed_2 <- predict(fit2)$est_non_rf
+pred_fixed_3 <- predict(fit3)$est_non_rf
+pred_fixed_4 <- predict(fit4)$est_non_rf
+
+r_1 <- DHARMa::createDHARMa(
+  simulatedResponse = s_1,
+  observedResponse = sim_dat_1$observed,
+  fittedPredictedResponse = pred_fixed_1
+)
+
+r_2 <- DHARMa::createDHARMa(
+  simulatedResponse = s_2,
+  observedResponse = sim_dat_2$observed,
+  fittedPredictedResponse = pred_fixed_2
+)
+
+r_3 <- DHARMa::createDHARMa(
+  simulatedResponse = s_3,
+  observedResponse = sim_dat_3$observed,
+  fittedPredictedResponse = pred_fixed_3
+)
+
+r_4 <- DHARMa::createDHARMa(
+  simulatedResponse = s_4,
+  observedResponse = sim_dat_4$observed,
+  fittedPredictedResponse = pred_fixed_4
+)
+```
+
+Plot spatial autocorrelation
+
+```{r}
+DHARMa::testSpatialAutocorrelation(r_1, x = sim_dat_1$X, y = sim_dat_1$Y)
+DHARMa::testSpatialAutocorrelation(r_2, x = sim_dat_2$X, y = sim_dat_2$Y)
+DHARMa::testSpatialAutocorrelation(r_3, x = sim_dat_3$X, y = sim_dat_3$Y)
+DHARMa::testSpatialAutocorrelation(r_4, x = sim_dat_4$X, y = sim_dat_4$Y)
+```
+
+Refit the spatial model with spatial random effect and look again at residual correlation in space
+
+```{r}
+
+fit4b <- sdmTMB(observed ~ 1, data = sim_dat_4, family = gaussian(), mesh = mesh, spatial = "on", spatiotemporal = "off",
+               control = sdmTMBcontrol(newton_loops = 2))
+#sanity(fit4b)
+
+s_4b <- simulate(fit4b, nsim = 500)
+
+pred_fixed_4b <- predict(fit4b)$est_non_rf
+
+r_4b <- DHARMa::createDHARMa(
+  simulatedResponse = s_4b,
+  observedResponse = sim_dat_4$observed,
+  fittedPredictedResponse = pred_fixed_4b
+)
+
+DHARMa::testSpatialAutocorrelation(r_4b, x = sim_dat_4$X, y = sim_dat_4$Y)
+```
+
+
+
+
+```{r}

@@ -1,0 +1,496 @@
+---
+title: "Explore models"
+author: "Max Lindmark"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+  df_print: paged
+pdf_document: default
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include = FALSE, cache=FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 12,
+  fig.asp = 0.618,
+  fig.align ='center'
+)
+```
+
+```{r load libraries, message=FALSE, warning=TRUE}
+# Load libraries, install if needed
+library(tidyverse)
+library(tidylog)
+library(RCurl)
+library(RColorBrewer)
+library(sdmTMB)
+library(devtools)
+library(patchwork)
+library(sf)
+library(ggeffects)
+library(visreg)
+
+# Source utm function
+source_url("https://raw.githubusercontent.com/maxlindmark/marine-litter/main/R/functions/lon-lat-utm.R")
+
+# Continuous colors
+# options(ggplot2.continuous.colour = "viridis")
+# 
+# # Discrete colors
+# scale_colour_discrete <- function(...) {
+#   scale_colour_brewer(palette = "Dark2")
+# }
+# 
+# scale_fill_discrete <- function(...) {
+#   scale_fill_brewer(palette = "Dark2")
+# }
+```
+
+#TODO
+Fit tweedie biomass and poisson models to the categories I can. For the rest, fit presence absence models and visualise in a nice way.
+
+Make map plots
+
+```{r}
+# Normally I'd source code for map plots, but this caused errors when ggplotting when knitting only, not when running the for loop in a fresh session... 
+# change to url once we have the final one
+#source("/Users/maxlindmark/Dropbox/Max work/R/marine-litter/R/functions/map-plot.R")
+# Seem I have to run this to avoid error when knitting (the ggplotting inside the for loop)
+
+# Specify map ranges
+ymin = 54; ymax = 60; xmin = 2; xmax = 21
+
+map_data <- rnaturalearth::ne_countries(
+  scale = "medium",
+  returnclass = "sf",
+  continent = "europe")
+
+# Crop the polygon for plotting and efficiency:
+# st_bbox(map_data) # find the rough coordinates
+sf::sf_use_s2(FALSE)
+
+swe_coast <- suppressWarnings(suppressMessages(
+  st_crop(map_data,
+          c(xmin = xmin, ymin = ymin, xmax = xmax, ymax = ymax))))
+
+ggplot(swe_coast) + 
+  geom_sf()
+
+# Transform our map into UTM 33 coordinates, which is the equal-area projection we fit in:
+utm_zone33 <- 32633
+swe_coast_proj <- sf::st_transform(swe_coast, crs = utm_zone33)
+
+ggplot(swe_coast_proj) + 
+  geom_sf()
+
+# Define plotting theme for main plot
+theme_plot <- function(base_size = 11, base_family = "") {
+  theme_light(base_size = 11, base_family = "") +
+    theme(
+      axis.text = element_text(color = "grey5"),
+      legend.position = "bottom",
+      legend.key.height = unit(0.2, "cm"),
+      legend.margin = margin(0, 0, 0, 0),
+      legend.box.margin = margin(-5, -5, -5, -5),
+      strip.background = element_rect(fill = "grey95"),
+      strip.text = element_text(color = "grey10"),
+      strip.text.x = element_text(margin = margin(b = 2, t = 2), color = "grey10", size = 10),
+      panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+      panel.background = element_blank()
+      #, axis.line = element_line(colour = "grey20"),
+    )
+}
+
+# Make default base map plot
+#sf::st_boundary(swe_coast_proj)
+
+xmin2 <- -61896.44*1.005
+xmax2 <- 893074.5*0.91
+ymin2 <- 5983578*1.025
+ymax2 <- 6691902*0.99
+
+plot_map <-
+  ggplot(swe_coast_proj) +
+  xlim(xmin2, xmax2) +
+  ylim(ymin2, ymax2) +
+  labs(x = "Longitude", y = "Latitude") +
+  geom_sf(size = 0.3) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  theme_plot() +
+  NULL
+
+plot_map_west <-
+  ggplot(swe_coast_proj) +
+  xlim(200000, xmax2*0.45) +
+  ylim(ymin2*1.015, ymax2*0.99) +
+  labs(x = "Longitude", y = "Latitude") +
+  geom_sf(size = 0.3) +
+  theme_plot() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  NULL
+```
+
+# Read data
+
+```{r}
+biom <- read_csv("data/west_coast_litter_biomass.csv") %>% 
+  mutate(year_f = as.factor(year),
+         quarter_f = as.factor(quarter),
+         depth_sc = (depth - mean(depth)) /sd(depth))
+
+num <- read_csv("data/west_coast_litter_numbers.csv") %>% 
+  mutate(year_f = as.factor(year),
+         quarter_f = as.factor(quarter),
+         depth_sc = (depth - mean(depth)) /sd(depth))
+
+# Make data long so that I can for loop through all categories
+biom <- biom %>% 
+  rename(plastic = plast,
+         metal = metall,
+         rubber = gummi,
+         glass = glas,
+         natural = naturmaterial,
+         other = diverse) %>% 
+  pivot_longer(c(plastic, metal, rubber, glass, natural, other, sup, fishery),
+               names_to = "litter_category",
+               values_to = "density")
+
+num <- num %>% 
+  rename(plastic = plast,
+         metal = metall,
+         rubber = gummi,
+         glass = glas,
+         natural = naturmaterial,
+         other = diverse) %>% 
+  pivot_longer(c(plastic, metal, rubber, glass, natural, other, sup, fishery),
+               names_to = "litter_category",
+               values_to = "density") %>% 
+  mutate(number = density * swept_area_km2)
+
+# Load pred grid
+pred_grid_west <- read_csv("data/pred_grid_west.csv") %>% 
+  mutate(year_f = as.factor(year),
+         quarter_f = as.factor(1),
+         depth_sc = (depth - mean(num$depth)) / sd(num$depth)) %>% 
+  mutate(X = X*1000,
+         Y = Y*1000)
+```
+
+# Fit 
+
+```{r}
+ggplot(num, aes(number)) + 
+  geom_histogram() + 
+  facet_wrap(~litter_category, scales = "free")
+
+sort(unique(num$number))
+
+# Fit in for loop
+mesh <- make_mesh(filter(num, litter_category == "plastic"), c("X", "Y"), cutoff = 3)
+#mesh <- make_mesh(num, c("X", "Y"), n_knots = 75, seed = 9)
+plot(mesh)
+
+data_list_pred <- list()
+data_list_sim <- list()
+data_list_sims <- list()
+
+# Test which categories the model "fits" easily too
+# 
+# d_test <- num %>%
+#   filter(litter_category == unique(num$litter_category)[8]) %>%
+#   droplevels()
+# 
+# d_test$litter_category[1]
+# 
+# d_test %>% filter(density > 0) %>% ggplot() + geom_histogram(aes(number))
+# 
+# m <- sdmTMB(
+#   data = d_test,
+#   formula = number ~ 0 + year_f + depth_sc,
+#   mesh = mesh,
+#   family = poisson(link = "log"),
+#   spatial = "on",
+#   time = "year",
+#   spatiotemporal = "off",
+#   control = sdmTMBcontrol(newton_loops = 1)
+#   )
+# 
+# sanity(m)
+# tidy(m, conf.int = TRUE)
+     
+# d_test$resids <- residuals(m) # randomized quantile residuals
+# qqnorm(d_test$resids);qqline(d_test$resids)
+    
+# ddd <- d_test_sub %>%
+#   mutate(id = paste(lat, lon)) %>%
+#   group_by(id) %>%
+#   #summarise(n = n()) %>%
+#   mutate(n = n()) %>%
+#   ungroup() #%>%
+#   #distinct(n)
+# ddd %>% filter(n == 2) %>% as.data.frame()
+
+# s_pois <- simulate(m, nsim = 500)
+# 
+# pred_fixed <- m$family$linkinv(predict(m)$est_non_rf)
+# 
+# r_pois <- DHARMa::createDHARMa(
+#   simulatedResponse = s_pois,
+#   observedResponse = d_test$number,
+#   fittedPredictedResponse = pred_fixed
+# )
+# 
+# DHARMa::testSpatialAutocorrelation(r_pois, x = d_test$X, y = d_test$Y)
+# 
+# ggplot(d_test, aes(X, Y, col = resids)) +
+#   scale_colour_gradient2() +
+#   geom_jitter(size = 1) +
+#   coord_fixed() +
+#   theme_plot()
+```
+
+
+
+
+```{r}
+mesh <- make_mesh(filter(num, litter_category == "plastic"), c("X", "Y"), cutoff = 3)
+plot(mesh)
+
+num %>% 
+  filter(!litter_category %in% c("fishery", "plastic", "sup")) %>% 
+  filter(number > 1) %>% 
+  ggplot(aes(number)) + 
+  geom_histogram() + 
+  scale_y_continuous(breaks = c(0:10)) +
+  scale_x_continuous(breaks = c(0:50)) +
+  facet_wrap(~litter_category, scales = "free")
+
+# Glass, metal, other and rubber are essentially binomial data... 
+
+binom <- num %>%
+  filter(!litter_category %in% c("fishery", "plastic", "sup")) %>% 
+  mutate(present = ifelse(number == 0, 0, 1))
+
+d_test <- binom %>%
+  filter(litter_category == unique(binom$litter_category)[1]) %>%
+  droplevels()
+
+d_test$litter_category[1]
+
+ggplot(d_test, aes(present)) + 
+  geom_histogram() +
+  facet_wrap(~year)
+
+m <- sdmTMB(
+  data = d_test,
+  formula = present ~ -1 + depth_sc,
+  time_varying = ~1,
+  mesh = mesh,
+  family = binomial(link = "logit"),
+  spatial = "on",
+  time = "year",
+  spatiotemporal = "off",
+  control = sdmTMBcontrol(newton_loops = 1)
+  )
+
+sanity(m)
+tidy(m, conf.int = TRUE)
+
+d_test$resids <- residuals(m) # randomized quantile residuals
+qqnorm(d_test$resids);qqline(d_test$resids)
+    
+s_pois <- simulate(m, nsim = 500)
+
+pred_fixed <- m$family$linkinv(predict(m)$est_non_rf)
+
+r_pois <- DHARMa::createDHARMa(
+  simulatedResponse = s_pois,
+  observedResponse = d_test$number,
+  fittedPredictedResponse = pred_fixed
+)
+
+DHARMa::testSpatialAutocorrelation(r_pois, x = d_test$X, y = d_test$Y)
+ 
+# ggplot(d_test, aes(X, Y, col = resids)) +
+#   scale_colour_gradient2() +
+#   geom_jitter(size = 1) +
+#   coord_fixed() +
+#   theme_plot()
+
+# This seems like a good option for these problematic categories
+# m <- sdmTMB(
+#   data = d_test,
+#   formula = present ~ 0 + (1|year_f) + depth_sc,
+#   mesh = mesh,
+#   family = binomial(link = "logit"),
+#   spatial = "off",
+#   time = "year",
+#   spatiotemporal = "off",
+#   control = sdmTMBcontrol(newton_loops = 1)
+#   )
+# 
+# sanity(m)
+# tidy(m, conf.int = TRUE)
+```
+
+
+```{r}
+mesh <- make_mesh(filter(num, litter_category == "plastic"), c("X", "Y"), cutoff = 3)
+plot(mesh)
+
+num %>% 
+  filter(!litter_category %in% c("fishery", "plastic", "sup")) %>% 
+  filter(number > 1) %>% 
+  ggplot(aes(number)) + 
+  geom_histogram() + 
+  scale_y_continuous(breaks = c(0:10)) +
+  scale_x_continuous(breaks = c(0:50)) +
+  facet_wrap(~litter_category, scales = "free")
+
+# Glass, metal, other and rubber are essentially binomial data... 
+
+binom <- num %>%
+  filter(!litter_category %in% c("fishery", "plastic", "sup")) %>% 
+  mutate(present = ifelse(number == 0, 0, 1))
+
+d_test <- binom %>%
+  filter(litter_category == unique(binom$litter_category)[1]) %>%
+  droplevels()
+
+d_test$litter_category[1]
+
+ggplot(d_test, aes(present)) + 
+  geom_histogram() +
+  facet_wrap(~year)
+
+m <- sdmTMB(
+  data = d_test,
+  formula = present ~ -1 + depth_sc,
+  time_varying = ~1,
+  mesh = mesh,
+  family = binomial(link = "logit"),
+  spatial = "on",
+  time = "year",
+  spatiotemporal = "off",
+  control = sdmTMBcontrol(newton_loops = 1)
+  )
+
+sanity(m)
+tidy(m, conf.int = TRUE)
+
+d_test$resids <- residuals(m) # randomized quantile residuals
+qqnorm(d_test$resids);qqline(d_test$resids)
+    
+s_pois <- simulate(m, nsim = 500)
+
+pred_fixed <- m$family$linkinv(predict(m)$est_non_rf)
+
+r_pois <- DHARMa::createDHARMa(
+  simulatedResponse = s_pois,
+  observedResponse = d_test$number,
+  fittedPredictedResponse = pred_fixed
+)
+
+DHARMa::testSpatialAutocorrelation(r_pois, x = d_test$X, y = d_test$Y)
+ 
+# ggplot(d_test, aes(X, Y, col = resids)) +
+#   scale_colour_gradient2() +
+#   geom_jitter(size = 1) +
+#   coord_fixed() +
+#   theme_plot()
+
+# This seems like a good option for these problematic categories
+# m <- sdmTMB(
+#   data = d_test,
+#   formula = present ~ 0 + (1|year_f) + depth_sc,
+#   mesh = mesh,
+#   family = binomial(link = "logit"),
+#   spatial = "off",
+#   time = "year",
+#   spatiotemporal = "off",
+#   control = sdmTMBcontrol(newton_loops = 1)
+#   )
+# 
+# sanity(m)
+# tidy(m, conf.int = TRUE)
+     
+
+```
+
+```{r fit}
+# https://haakonbakkagit.github.io/btopic104.html
+# https://haakonbakkagit.github.io/btopic114.html
+
+ggplot(num, aes(number)) + 
+  geom_histogram() + 
+  facet_wrap(~litter_category, scales = "free")
+
+sort(unique(num$number))
+
+# Fit in for loop
+mesh <- make_mesh(filter(num, litter_category == "plastic"), c("X", "Y"), cutoff = 3)
+#mesh <- make_mesh(num, c("X", "Y"), n_knots = 75, seed = 9)
+plot(mesh)
+
+data_list_pred <- list()
+data_list_sim <- list()
+data_list_sims <- list()
+
+# Test which categories the model "fits" easily too
+# 
+# d_test <- num %>%
+#   filter(litter_category == unique(num$litter_category)[8]) %>%
+#   droplevels()
+# 
+# d_test$litter_category[1]
+# 
+# d_test %>% filter(density > 0) %>% ggplot() + geom_histogram(aes(number))
+# 
+# m <- sdmTMB(
+#   data = d_test,
+#   formula = number ~ 0 + year_f + depth_sc,
+#   mesh = mesh,
+#   family = poisson(link = "log"),
+#   spatial = "on",
+#   time = "year",
+#   spatiotemporal = "off",
+#   control = sdmTMBcontrol(newton_loops = 1)
+#   )
+# 
+# sanity(m)
+# tidy(m, conf.int = TRUE)
+     
+# d_test$resids <- residuals(m) # randomized quantile residuals
+# qqnorm(d_test$resids);qqline(d_test$resids)
+    
+# ddd <- d_test_sub %>%
+#   mutate(id = paste(lat, lon)) %>%
+#   group_by(id) %>%
+#   #summarise(n = n()) %>%
+#   mutate(n = n()) %>%
+#   ungroup() #%>%
+#   #distinct(n)
+# ddd %>% filter(n == 2) %>% as.data.frame()
+
+# s_pois <- simulate(m, nsim = 500)
+# 
+# pred_fixed <- m$family$linkinv(predict(m)$est_non_rf)
+# 
+# r_pois <- DHARMa::createDHARMa(
+#   simulatedResponse = s_pois,
+#   observedResponse = d_test$number,
+#   fittedPredictedResponse = pred_fixed
+# )
+# 
+# DHARMa::testSpatialAutocorrelation(r_pois, x = d_test$X, y = d_test$Y)
+# 
+# ggplot(d_test, aes(X, Y, col = resids)) +
+#   scale_colour_gradient2() +
+#   geom_jitter(size = 1) +
+#   coord_fixed() +
+#   theme_plot()
+```
+
