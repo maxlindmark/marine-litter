@@ -242,10 +242,12 @@ Plot all data
 # Plotting litter data
 # Plot
 plot_map + 
+  theme_plot(base_size = 14) +
   geom_point(data = litter, aes(X*1000, Y*1000, color = trend_area)) +
   geom_sf(size = 0.1) + 
-  facet_wrap(~year, ncol = 3) +
-  NULL
+  facet_wrap(~year, ncol = 3)
+
+ggsave("figures/supp/area_map.png", dpi = 300)
 ```
 
 # West coast data
@@ -260,10 +262,13 @@ litterw <- dat %>%
   dplyr::select(-keep)
 
 plot_map_west + 
+  theme_plot(base_size = 14) +
   geom_point(data = litterw, aes(X*1000, Y*1000, color = trend_area)) +
   geom_sf(size = 0.1) +  
   facet_wrap(~year, ncol = 5) +
-  NULL
+  theme(axis.text.x = element_text(angle = 90))
+
+ggsave("figures/supp/w_coast_map.png", dpi = 300)
 
 # Plot proportion zero by litter category and year
 litterw %>% 

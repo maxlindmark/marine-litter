@@ -87,8 +87,8 @@ ggplot(swe_coast_proj) +
   geom_sf()
 
 # Define plotting theme for main plot
-theme_plot <- function(base_size = 11, base_family = "") {
-  theme_light(base_size = 11, base_family = "") +
+theme_plot <- function(base_size = base_size, base_family = "") {
+  theme_light(base_size = base_size, base_family = "") +
     theme(
       axis.text = element_text(color = "grey5"),
       legend.position = "bottom",
@@ -179,6 +179,13 @@ pred_grid_west <- read_csv("data/pred_grid_west.csv") %>%
          depth_sc = (depth - mean(num$depth)) / sd(num$depth)) %>% 
   mutate(X = X*1000,
          Y = Y*1000)
+
+plot_map_west + 
+  theme_plot(base_size = 14) +
+  geom_point(data = pred_grid_west, aes(X, Y), alpha = 0.5, size = 0.1) 
+
+ggsave("figures/supp/pred_grid.png", dpi = 300)
+
 ```
 
 # Fit models
@@ -195,13 +202,74 @@ mesh <- make_mesh(num %>% filter(litter_category == "sup"), c("X", "Y"), cutoff 
 plot(mesh)
 ```
 
+### Test model to see 
+
+```{r first test to check residual correlation}
+
+    # dd <- biom %>%
+    #     filter(litter_category == "fishery") %>%
+    #     droplevels()
+    # 
+    # m0 <- sdmTMB(
+    #   data = dd,
+    #   formula = density ~ 0 + year_f + depth_sc,
+    #   mesh = mesh,
+    #   family = tweedie(),
+    #   spatial = "off",
+    #   time = "year",
+    #   spatiotemporal = "off"
+    #   )
+    # 
+    # dd$m0_resids <- residuals(m0) # randomized quantile residuals
+    # 
+    # m1 <- sdmTMB(
+    #   data = dd,
+    #   formula = density ~ 0 + year_f + depth_sc,
+    #   mesh = mesh,
+    #   family = tweedie(),
+    #   spatial = "on",
+    #   time = "year",
+    #   spatiotemporal = "IID"
+    #   )
+    # 
+    # dd$m1_resids <- residuals(m1) # randomized quantile residuals
+    # 
+    # dd2 <- dd %>%
+    #   pivot_longer(c(m0_resids, m1_resids))
+    #    
+    # ggplot(dd2 %>% filter(value > -3 & value < 3), aes(X, Y, col = value)) +
+    #   scale_colour_gradient2() +
+    #   geom_point(size = 2) +
+    #   facet_grid(name~year) +
+    #   theme_minimal() +
+    #   coord_fixed() + 
+    #   theme(panel.grid.major = element_blank(),
+    #         panel.grid.minor = element_blank(),
+    #         panel.background = element_blank())
+    #  
+    # 
+    # pred_fixed <- predict(m0)$est
+    # s <- simulate(m0, nsim = 500)
+    # r <- DHARMa::createDHARMa(
+    #   simulatedResponse = s,
+    #   observedResponse = dd$density,
+    #   fittedPredictedResponse = pred_fixed
+    #   )
+    # plot(r)
+    # DHARMa::testSpatialAutocorrelation(r, x = dd$X, y = dd$Y)
+    # 
+    # # In this case, it doesn't seem like a very clear spatial correlation
+    # 
+    # print(m1)
+        
+```
+
+
 ## Binomial models
 
 ```{r}
 data_list_coef <- list()
 data_list_pred <- list()
-data_list_sim <- list()
-data_list_sims <- list()
 
 # Year as a random effect because in some years we don't have any observations at all of presences
 
@@ -228,17 +296,27 @@ for(i in unique(binom$litter_category)) {
     
     data_list_coef[[i]] <- tidy(m, conf.int = TRUE) %>% mutate(model = paste("binom", i, sep = "_"))
 
-    
     # Plot residuals
     mcmc_res <- residuals(m, type = "mle-mcmc", mcmc_iter = 201, mcmc_warmup = 200)
     qqnorm(mcmc_res, asp = 1, main = paste("Normal Q-Q Plot", i, sep = " "))
     qqline(mcmc_res)
     
+    # Check for spatial autocorrelation
+    pred_fixed <- m$family$linkinv(predict(m)$est)
+    s <- simulate(m, nsim = 500)
+    r <- DHARMa::createDHARMa(
+      simulatedResponse = s,
+      observedResponse = dd$present,
+      fittedPredictedResponse = pred_fixed
+      )
+    plot(r)
+    DHARMa::testSpatialAutocorrelation(r, x = dd$X, y = dd$Y)
+    
     # Plot conditional/marginal effects
     visreg(m, xvar = "year_f", scale = "response")
     
     nd <- data.frame(
-      depth_sc = 0,
+      depth_sc = mean(dd$depth_sc),
       year = unique(as.integer(as.character(dd$year_f)))) %>%
       mutate(year_f = as.factor(year),
              X = 0,
@@ -254,50 +332,12 @@ for(i in unique(binom$litter_category)) {
       geom_ribbon(alpha = 0.4) +
       coord_cartesian(expand = F))
     
+    data_list_pred[[i]] <- p %>% mutate(model = i)
+    
     # Save model object
     saveRDS(m, paste("output/models/binom_", i, ".rds", sep = ""))
     
-    # Predict on grid
-    pred <- predict(m, newdata = pred_grid_west) %>% 
-      mutate(model = i)
-    
-    data_list_pred[[i]] <- pred
-  
-    # Get sims
-    ncells <- filter(pred_grid_west, year == max(pred_grid_west$year)) %>% nrow()
-    nsim <- 500
-    sim <- predict(m, newdata = pred_grid_west, nsim = nsim)
-    
-    # Plot CV in space
-    # Just plot last year
-    sim_last <- sim[pred_grid_west$year == max(pred_grid_west$year), ]
-    
-    pred_last <- pred[pred$year == max(pred_grid_west$year), ]
-    pred_last$cv <- round(apply(exp(sim_last), 1, function(x) sd(x) / mean(x)), 2)
-    
-    print(plot_map_west + 
-      geom_raster(data = pred_last, aes(X, Y, fill = cv)) +
-      scale_fill_viridis_c() + 
-      geom_sf(size = 0.1) + 
-      NULL)
-    
-    ggsave(paste("figures/supp/cv_binom_", i, ".png", sep = ""))
-    
-    # Get index & full index (i.e. returning all sims)
-    index_sim <- get_index_sims(sim,
-                                area = rep(1/ncells, nrow(sim))) %>% mutate(model = i)
-    
-    data_list_sim[[i]] <- index_sim
-    
-    index_sim_full <- get_index_sims(sim,
-                                     area = rep(1/ncells, nrow(sim)),
-                                     return_sims = TRUE) %>% mutate(model = i) # Note that we just get the means here
-    
-    data_list_sims[[i]] <- index_sim_full
-    
-    
-    # See how mean index compares to data
-    print(ggplot(index_sim, aes(year, y = est, ymin = lwr, ymax = upr)) +
+    print(ggplot(p, aes(year, y = inv.logit(est), ymax = inv.logit(est + 1.96*est_se), ymin = inv.logit(est - 1.96*est_se))) +
       geom_line() +
       geom_line(data = dd %>%
                   group_by(year) %>%
@@ -319,13 +359,9 @@ for(i in unique(binom$litter_category)) {
 # Save predictions and sims as data frames
 dat_coef_binom <- dplyr::bind_rows(data_list_coef)
 dat_pred_binom <- dplyr::bind_rows(data_list_pred)
-dat_sim_binom <- dplyr::bind_rows(data_list_sim)
-dat_sims_binom <- dplyr::bind_rows(data_list_sims)
 
 write_csv(dat_coef_binom, "output/dat_coef_binom.csv")
 write_csv(dat_pred_binom, "output/dat_pred_binom.csv")
-write_csv(dat_sim_binom, "output/dat_sim_binom.csv")
-write_csv(dat_sims_binom, "output/dat_sims_binom.csv")
 ```
 
 ## Poisson/negative binomial models
@@ -364,33 +400,8 @@ for(i in unique(num$litter_category)) {
     qqline(mcmc_res)
     
     # Plot conditional/marginal effects
-    # g <- ggeffect(m, "year_f")
-    # plot(g, add.data = TRUE)
-     
     visreg(m, xvar = "year_f", scale = "response")
-    # d <- visreg(m, xvar = "year_f", plot = FALSE, scale = "response")
-    # head(d$fit)
-    # ggplot(d$fit, aes(x = as.numeric(year_f), y = visregFit)) +
-    #   geom_line() +
-    #   geom_ribbon(aes(ymin = visregLwr, ymax = visregUpr), alpha = 0.5) +
-    #   #geom_point(aes(y = visregRes), data = d$res, size = 1, alpha = 0.4) +
-    #   NULL
-    # 
-    # nd <- data.frame(
-    #   depth_sc = 0,
-    #   year = unique(as.integer(as.character(dd$year_f)))) %>% 
-    #   mutate(year_f = as.factor(year))
-    # 
-    # p <- predict(m, newdata = nd, se_fit = TRUE, re_form = NA)
-    # 
-    # ggplot(p, aes(year, exp(est),
-    #               ymin = exp(est - 1.96 * est_se),
-    #               ymax = exp(est + 1.96 * est_se)
-    #               )) +
-    #   geom_line() +
-    #   geom_ribbon(alpha = 0.4) +
-    #   coord_cartesian(expand = F)
-    
+
     # Save model object
     saveRDS(m, paste("output/models/numbers_", i, ".rds", sep = ""))
     

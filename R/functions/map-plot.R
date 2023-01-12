@@ -29,7 +29,7 @@ ggplot(swe_coast_proj) +
 
 # Define plotting theme for main plot
 theme_plot <- function(base_size = 11, base_family = "") {
-  theme_light(base_size = 11, base_family = "") +
+  theme_light(base_size = base_size, base_family = "") +
     theme(
       axis.text = element_text(color = "grey5"),
       legend.position = "bottom",
