@@ -27,13 +27,13 @@ library(tidyverse)
 library(tidylog)
 library(sp)
 library(raster)
+library(devtools)
 
 # Source code for map plots
-# change to url once we have the final one
-source("/Users/maxlindmark/Dropbox/Max work/R/marine-litter/R/functions/map-plot.R")
+source_url("https://raw.githubusercontent.com/maxlindmark/marine-litter/main/R/functions/map-plot.R")
 
 # Read west coast data
-litterw <- read_csv("data/clean_west_coast_litter.csv")
+litterw <- readr::read_csv("https://raw.githubusercontent.com/maxlindmark/marine-litter/main/data/west_coast_litter_biomass.csv")
 
 x <- litterw$X
 y <- litterw$Y
@@ -65,6 +65,11 @@ pred_grid <- expand.grid(
   Y = seq(min(litterw$Y), max(litterw$Y), cell_width),
   year = unique(litterw$year)
   )
+
+ggplot(pred_grid %>% filter(year == 2019), aes(X, Y)) +
+  geom_point(size = 0.1) +
+  theme_void() +
+  coord_sf()
 
 sp::coordinates(pred_grid) <- c("X", "Y")
 
@@ -101,8 +106,18 @@ projected_raster <- projectRaster(dep_rast, crs = sr)
 pred_grid$depth <- extract(projected_raster, pred_grid %>% dplyr::select(X, Y) %>% mutate(X = X*1000, Y = Y*1000))
 
 # Convert to depth (instead of elevation)
+ggplot(pred_grid, aes(X, Y, color = depth)) +
+  geom_point() +
+  coord_fixed()
+
 ggplot(pred_grid, aes(depth)) + geom_histogram()
-#> `stat_bin()` using `bins = 30`. Pick better value with `binwidth`.
+pred_grid$depth <- (pred_grid$depth - max(pred_grid$depth)) *-1
+ggplot(pred_grid, aes(depth)) + geom_histogram()
+
+# Much better
+ggplot(pred_grid, aes(X, Y, color = depth)) +
+  geom_point() +
+  coord_fixed()
 ```
 
 ```{r}

@@ -32,8 +32,7 @@ library(viridis)
 library(raster)
 
 # Source code for map plots
-# change to url once we have the final one
-source("/Users/maxlindmark/Dropbox/Max work/R/marine-litter/R/functions/map-plot.R")
+source_url("https://raw.githubusercontent.com/maxlindmark/marine-litter/main/R/functions/map-plot.R")
 
 # Source utm function
 source_url("https://raw.githubusercontent.com/maxlindmark/marine-litter/main/R/functions/lon-lat-utm.R")
@@ -230,10 +229,24 @@ dep_rast <- raster::merge(west, east)
 dat$depth <- extract(dep_rast, dat %>% dplyr::select(lon, lat))
 
 # Convert to depth (instead of elevation)
+ggplot(dat, aes(lon, lat, color = depth)) +
+  geom_point() +
+  coord_fixed()
+
 ggplot(dat, aes(depth)) + geom_histogram()
 #> `stat_bin()` using `bins = 30`. Pick better value with `binwidth`.
 
 dat <- dat %>% filter(depth > 0)
+
+# Convert to depth (instead of elevation from seafloor)
+ggplot(dat, aes(depth)) + geom_histogram()
+dat$depth <- (dat$depth - max(dat$depth)) *-1
+ggplot(dat, aes(depth)) + geom_histogram()
+
+# Plot again- better
+ggplot(dat, aes(lon, lat, color = depth)) +
+  geom_point() +
+  coord_fixed()
 ```
 
 Plot all data

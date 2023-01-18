@@ -87,7 +87,7 @@ ggplot(swe_coast_proj) +
   geom_sf()
 
 # Define plotting theme for main plot
-theme_plot <- function(base_size = base_size, base_family = "") {
+theme_plot <- function(base_size = 11, base_family = "") {
   theme_light(base_size = base_size, base_family = "") +
     theme(
       axis.text = element_text(color = "grey5"),
@@ -133,6 +133,7 @@ plot_map_west <-
 ```
 
 # Read data
+Filter litter categories that have enough data to work with (hard to fit models to e.g., glass and metal since they occur so rarely in the data, some years have nothing. Could consider pooling years for those. See exploratory model fitting script (doesn't exist yet))
 
 ```{r}
 # Read and make data long so that I can for loop through all categories
@@ -180,12 +181,15 @@ pred_grid_west <- read_csv("data/pred_grid_west.csv") %>%
   mutate(X = X*1000,
          Y = Y*1000)
 
+# hist(pred_grid_west$depth_sc)
+# hist(pred_grid_west$depth)
+# sd(pred_grid_west$depth)
+
 plot_map_west + 
   theme_plot(base_size = 14) +
-  geom_point(data = pred_grid_west, aes(X, Y), alpha = 0.5, size = 0.1) 
+  geom_point(data = pred_grid_west, aes(X, Y), alpha = 0.5, size = 0.01) 
 
 ggsave("figures/supp/pred_grid.png", dpi = 300)
-
 ```
 
 # Fit models
@@ -195,10 +199,11 @@ For plastic, sup and fishery I have enough data to fit spatial models with both 
 # https://haakonbakkagit.github.io/btopic104.html
 # https://haakonbakkagit.github.io/btopic114.html
 
-max.edge <- mean(c(diff(range(num$X)), diff(range(num$Y)))) / 15
-cutoff <- max.edge/5
+# max.edge <- mean(c(diff(range(num$X)), diff(range(num$Y)))) / 15
+# cutoff <- max.edge/5
 
-mesh <- make_mesh(num %>% filter(litter_category == "sup"), c("X", "Y"), cutoff = 3)
+mesh <- make_mesh(num %>% filter(litter_category == "sup"), c("X", "Y"), cutoff = 4)
+#mesh <- make_mesh(num %>% filter(litter_category == "sup"), c("X", "Y"), type = "kmeans", n_knots = 50)
 plot(mesh)
 ```
 
@@ -206,64 +211,65 @@ plot(mesh)
 
 ```{r first test to check residual correlation}
 
-    # dd <- biom %>%
-    #     filter(litter_category == "fishery") %>%
-    #     droplevels()
-    # 
-    # m0 <- sdmTMB(
-    #   data = dd,
-    #   formula = density ~ 0 + year_f + depth_sc,
-    #   mesh = mesh,
-    #   family = tweedie(),
-    #   spatial = "off",
-    #   time = "year",
-    #   spatiotemporal = "off"
-    #   )
-    # 
-    # dd$m0_resids <- residuals(m0) # randomized quantile residuals
-    # 
-    # m1 <- sdmTMB(
-    #   data = dd,
-    #   formula = density ~ 0 + year_f + depth_sc,
-    #   mesh = mesh,
-    #   family = tweedie(),
-    #   spatial = "on",
-    #   time = "year",
-    #   spatiotemporal = "IID"
-    #   )
-    # 
-    # dd$m1_resids <- residuals(m1) # randomized quantile residuals
-    # 
-    # dd2 <- dd %>%
-    #   pivot_longer(c(m0_resids, m1_resids))
-    #    
-    # ggplot(dd2 %>% filter(value > -3 & value < 3), aes(X, Y, col = value)) +
-    #   scale_colour_gradient2() +
-    #   geom_point(size = 2) +
-    #   facet_grid(name~year) +
-    #   theme_minimal() +
-    #   coord_fixed() + 
-    #   theme(panel.grid.major = element_blank(),
-    #         panel.grid.minor = element_blank(),
-    #         panel.background = element_blank())
-    #  
-    # 
-    # pred_fixed <- predict(m0)$est
-    # s <- simulate(m0, nsim = 500)
-    # r <- DHARMa::createDHARMa(
-    #   simulatedResponse = s,
-    #   observedResponse = dd$density,
-    #   fittedPredictedResponse = pred_fixed
-    #   )
-    # plot(r)
-    # DHARMa::testSpatialAutocorrelation(r, x = dd$X, y = dd$Y)
-    # 
-    # # In this case, it doesn't seem like a very clear spatial correlation
-    # 
-    # print(m1)
+    dd <- biom %>%
+        filter(litter_category == "fishery") %>%
+        droplevels()
+
+    m0 <- sdmTMB(
+      data = dd,
+      formula = density ~ 0 + year_f + depth_sc,
+      mesh = mesh,
+      family = tweedie(),
+      spatial = "off",
+      time = "year",
+      spatiotemporal = "off"
+      )
+
+    dd$m0_resids <- residuals(m0) # randomized quantile residuals
+
+    hist(dd$m0_resids)
+    
+    m1 <- sdmTMB(
+      data = dd,
+      formula = density ~ 0 + year_f + depth_sc,
+      mesh = mesh,
+      family = tweedie(),
+      spatial = "on",
+      time = "year",
+      spatiotemporal = "IID"
+      )
+
+    dd$m1_resids <- residuals(m1) # randomized quantile residuals
+
+    dd2 <- dd %>%
+      pivot_longer(c(m0_resids, m1_resids))
+
+    ggplot(dd2 %>% filter(value > -3 & value < 3), aes(X, Y, col = value)) +
+      scale_colour_gradient2() +
+      geom_point(size = 2) +
+      facet_grid(name~year) +
+      theme_minimal() +
+      coord_fixed() +
+      theme(panel.grid.major = element_blank(),
+            panel.grid.minor = element_blank(),
+            panel.background = element_blank())
+
+    # Check spatial autocorrelation
+    pred_fixed <- predict(m0)$est
+    s <- simulate(m0, nsim = 500)
+    r <- DHARMa::createDHARMa(
+      simulatedResponse = s,
+      observedResponse = dd$density,
+      fittedPredictedResponse = pred_fixed
+      )
+    plot(r)
+    DHARMa::testSpatialAutocorrelation(r, x = dd$X, y = dd$Y)
+
+    # In this case, it doesn't seem like a very clear spatial correlation
+
+    print(m1)
         
 ```
-
 
 ## Binomial models
 
@@ -282,7 +288,7 @@ for(i in unique(binom$litter_category)) {
     m <- sdmTMB(
       data = dd,
       formula = present ~ depth_sc + (1|year_f),
-      offset = dd$swept_area_km2,
+      offset = dd$swept_area_km2, #log
       mesh = mesh,
       family = binomial(link = "logit"),
       spatial = "off",
@@ -382,7 +388,7 @@ for(i in unique(num$litter_category)) {
       data = dd,
       formula = number ~ -1 + year_f + depth_sc,
       mesh = mesh,
-      offset = dd$swept_area_km2,
+      offset = dd$swept_area_km2, #should be log
       family = nbinom2(link = "log"),
       spatial = "on",
       time = "year",
