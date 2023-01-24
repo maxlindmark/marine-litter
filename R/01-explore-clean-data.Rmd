@@ -226,7 +226,7 @@ east <- raster("data/depth_geo_tif/D6_2018_rgb-1.tif")
 
 dep_rast <- raster::merge(west, east)
 
-dat$depth <- extract(dep_rast, dat %>% dplyr::select(lon, lat))
+dat$depth <- raster::extract(dep_rast, dat %>% dplyr::select(lon, lat))
 
 # Convert to depth (instead of elevation)
 ggplot(dat, aes(lon, lat, color = depth)) +

@@ -103,7 +103,7 @@ sr <- "+proj=utm +zone=33  +datum=WGS84 +units=m "
 
 projected_raster <- projectRaster(dep_rast, crs = sr)
 
-pred_grid$depth <- extract(projected_raster, pred_grid %>% dplyr::select(X, Y) %>% mutate(X = X*1000, Y = Y*1000))
+pred_grid$depth <- raster::extract(projected_raster, pred_grid %>% dplyr::select(X, Y) %>% mutate(X = X*1000, Y = Y*1000))
 
 # Convert to depth (instead of elevation)
 ggplot(pred_grid, aes(X, Y, color = depth)) +
