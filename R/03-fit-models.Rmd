@@ -39,17 +39,6 @@ library(boot)
 # Source utm function
 source_url("https://raw.githubusercontent.com/maxlindmark/marine-litter/main/R/functions/lon-lat-utm.R")
 
-# Continuous colors
-# options(ggplot2.continuous.colour = "viridis")
-# 
-# # Discrete colors
-# scale_colour_discrete <- function(...) {
-#   scale_colour_brewer(palette = "Dark2")
-# }
-# 
-# scale_fill_discrete <- function(...) {
-#   scale_fill_brewer(palette = "Dark2")
-# }
 ```
 
 # Make map plots
@@ -137,7 +126,7 @@ Filter litter categories that have enough data to work with (hard to fit models 
 
 ```{r}
 # Read and make data long so that I can for loop through all categories
-biom <- read_csv("data/west_coast_litter_biomass.csv") %>% 
+biom <- readr::read_csv("https://raw.githubusercontent.com/maxlindmark/marine-litter/main/data/west_coast_litter_biomass.csv") %>% 
   mutate(year_f = as.factor(year),
          quarter_f = as.factor(quarter),
          depth_sc = (depth - mean(depth)) / sd(depth)) %>% 
@@ -147,7 +136,7 @@ biom <- read_csv("data/west_coast_litter_biomass.csv") %>%
                values_to = "density") %>% 
   filter(litter_category %in% c("fishery", "plastic", "sup"))
 
-num <- read_csv("data/west_coast_litter_numbers.csv") %>% 
+num <- readr::read_csv("https://raw.githubusercontent.com/maxlindmark/marine-litter/main/data/west_coast_litter_numbers.csv") %>% 
   mutate(year_f = as.factor(year),
          quarter_f = as.factor(quarter),
          depth_sc = (depth - mean(depth)) /sd(depth)) %>% 
@@ -158,7 +147,7 @@ num <- read_csv("data/west_coast_litter_numbers.csv") %>%
   mutate(number = density * swept_area_km2) %>% 
   filter(litter_category %in% c("fishery", "plastic", "sup"))
 
-binom <- read_csv("data/west_coast_litter_biomass.csv") %>% 
+binom <- readr::read_csv("https://raw.githubusercontent.com/maxlindmark/marine-litter/main/data/west_coast_litter_biomass.csv") %>% 
   mutate(year_f = as.factor(year),
          quarter_f = as.factor(quarter),
          depth_sc = (depth - mean(depth)) / sd(depth)) %>% 

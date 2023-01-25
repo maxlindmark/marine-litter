@@ -30,6 +30,7 @@ library(devtools)
 library(sp)
 library(viridis)
 library(raster)
+library(devtools)
 
 # Source code for map plots
 source_url("https://raw.githubusercontent.com/maxlindmark/marine-litter/main/R/functions/map-plot.R")
@@ -53,8 +54,9 @@ scale_fill_discrete <- function(...) {
 # Read and clean data
 
 ```{r}
-w <- read_csv("data/ibts_agg_2013_2022_no_size.csv")
-b <- read_csv("data/bits_agg_2013_2022_no_size.csv")
+w <- readr::read_csv("https://raw.githubusercontent.com/maxlindmark/marine-litter/main/data/ibts_agg_2013_2022_no_size_rev1.csv")
+
+b <- readr::read_csv("https://raw.githubusercontent.com/maxlindmark/marine-litter/main/data/bits_agg_2013_2022_no_size.csv")
   
 glimpse(w)
 glimpse(b)  
