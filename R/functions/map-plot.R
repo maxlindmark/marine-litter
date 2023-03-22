@@ -89,6 +89,17 @@ plot_map_west <-
   #guides(fill = guide_legend(title.position = "top", title.hjust = 0.5)) +
   NULL
 
+plot_map_east <-
+  ggplot(swe_coast_proj) +
+  xlim(400000, xmax2*1.03) +
+  ylim(ymin2*0.995, ymax2*0.98) +
+  labs(x = "Longitude", y = "Latitude") +
+  geom_sf(size = 0.3) +
+  theme_plot() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  #guides(fill = guide_legend(title.position = "top", title.hjust = 0.5)) +
+  NULL
+
 # dd <- d %>% mutate(keep = ifelse(lon > 10.18, "Y", "N"),
 #                    keep = ifelse(lat < 56.5 & lon < 11.5, "N", keep))
 
