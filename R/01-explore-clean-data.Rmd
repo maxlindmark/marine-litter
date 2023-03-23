@@ -51,7 +51,7 @@ scale_fill_discrete <- function(...) {
 }
 ```
 
-# Read and clean data
+## Read and clean data
 
 ```{r}
 w <- readr::read_csv("https://raw.githubusercontent.com/maxlindmark/marine-litter/main/data/ibts_agg_2013_2022_no_size_rev1.csv")
@@ -87,7 +87,7 @@ d <- d %>%
 d$haul_id <- paste(d$Year, d$Quarter, d$StNo, d$HaulNo, round(d$lat, digits = 1), round(d$lon, digits = 1), sep = "_")
 ```
 
-Aggregate data (biomass density)
+## Aggregate data (biomass density)
 
 ```{r}
 # We want to fit models by "gruppnamn". We want to re-arrange the data so that the levels in gruppnamn are columns. First we also need to sum the weights/abundances across all "kategori" within a gruppnamn, because there are multiple
@@ -145,7 +145,7 @@ litter <- left_join(litter, d_sup2) %>%
   ungroup()
 ```
 
-Aggregate data (number density)
+## Aggregate data (number density)
 
 ```{r}
 # We want to fit models by "gruppnamn". We want to re-arrange the data so that the levels in gruppnamn are columns. First we also need to sum the weights/abundances across all "kategori" within a gruppnamn, because there are multiple
@@ -210,62 +210,68 @@ filter(litter_no, haul_id == "2015_1_57_16_57.9_11") %>% as.data.frame()
 ```{r merge data}
 dat <- bind_rows(litter %>% mutate(var = "biomass_density"),
                  litter_no %>% mutate(var = "numbers_density"))
+
+dat <- dat %>% filter(year > 2015 & year < 2022)
 ```
+
+## Add depth
 
 ```{r}
-filter(dat, haul_id == "2015_1_57_16_57.9_11") %>% as.data.frame()
+dep_raster <- terra::rast("data/Mean depth natural colour (with land).nc")
+
+crs(dep_raster, proj = TRUE)
+
+plot(dep_raster)
+
+dat$depth <- terra::extract(dep_raster, dat %>% dplyr::select(lon, lat))$elevation
+
+ggplot(dat, aes(lon, lat, color = depth*-1)) + 
+  geom_point()
+
+dat$depth <- dat$depth*-1
+
+dat <- dat %>% drop_na(depth)
+
+plot_map + 
+  theme_plot(base_size = 14) +
+  geom_point(data = dat, aes(X*1000, Y*1000, color = depth)) +
+  geom_sf(size = 0.1)
 ```
 
-Add depth
-
-```{r}
-# Read the tifs
-west <- raster("data/depth_geo_tif/D5_2018_rgb-1.tif")
-#plot(west)
-
-east <- raster("data/depth_geo_tif/D6_2018_rgb-1.tif")
-# plot(east)
-
-dep_rast <- raster::merge(west, east)
-
-dat$depth <- raster::extract(dep_rast, dat %>% dplyr::select(lon, lat))
-
-# Convert to depth (instead of elevation)
-ggplot(dat, aes(lon, lat, color = depth)) +
-  geom_point() +
-  coord_fixed()
-
-ggplot(dat, aes(depth)) + geom_histogram()
-#> `stat_bin()` using `bins = 30`. Pick better value with `binwidth`.
-
-dat <- dat %>% filter(depth > 0)
-
-# Convert to depth (instead of elevation from seafloor)
-ggplot(dat, aes(depth)) + geom_histogram()
-dat$depth <- (dat$depth - max(dat$depth)) *-1
-ggplot(dat, aes(depth)) + geom_histogram()
-
-# Plot again- better
-ggplot(dat, aes(lon, lat, color = depth)) +
-  geom_point() +
-  coord_fixed()
-```
-
-Plot all data
+## Plot all data
 
 ```{r plot all data}
 # Plotting litter data
 # Plot
 plot_map + 
   theme_plot(base_size = 14) +
-  geom_point(data = litter, aes(X*1000, Y*1000, color = trend_area)) +
+  geom_point(data = dat, aes(X*1000, Y*1000, color = trend_area)) +
   geom_sf(size = 0.1) + 
   facet_wrap(~year, ncol = 3)
 
 ggsave("figures/supp/area_map.png", dpi = 300)
+
+# Trim data and make response variables
+dat <- dat %>% 
+  mutate(tot = diverse + naturmaterial + metall + glas + gummi) %>% 
+  dplyr::select(-diverse, -naturmaterial, -metall, -glas, -gummi)
+
+glimpse(dat)
+
+# Make wide (again)
+d_abu <- dat %>%
+  filter(var == "numbers_density") %>% 
+  dplyr::select(haul_id, plast, sup, fishery, tot) %>% 
+  rename(plast_a = plast, sup_a = sup, fishery_a = fishery, tot_a = tot)
+
+d_bio <- dat %>%
+  filter(var == "biomass_density") %>% 
+  rename(plast_b = plast, sup_b = sup, fishery_b = fishery, tot_b = tot)
+
+dat <- left_join(d_abu, d_bio, by = "haul_id")
 ```
 
-# West coast data
+## West coast data
 
 ```{r}
 # For the west coast, our main area is in red (ANS-SE-SR-Nordsjon)... but some purple areas are really close and I think we should use them too. I suggest we filter data like this:
@@ -280,44 +286,59 @@ plot_map_west +
   theme_plot(base_size = 14) +
   geom_point(data = litterw, aes(X*1000, Y*1000, color = trend_area)) +
   geom_sf(size = 0.1) +  
-  facet_wrap(~year, ncol = 5) +
+  facet_wrap(~year, ncol = 3) +
   theme(axis.text.x = element_text(angle = 90))
 
 ggsave("figures/supp/w_coast_map.png", dpi = 300)
 
 # Plot proportion zero by litter category and year
 litterw %>% 
-  mutate(diverse_pa = ifelse(diverse == 0, "0", "1"),
-         naturmaterial_pa = ifelse(naturmaterial == 0, "0", "1"),
-         plast_pa = ifelse(plast == 0, "0", "1"),
-         metall_pa = ifelse(metall == 0, "0", "1"),
-         glas_pa = ifelse(glas == 0, "0", "1"),
-         gummi_pa = ifelse(gummi == 0, "0", "1"),
-         sup_pa = ifelse(sup == 0, "0", "1"),
-         fishery_pa = ifelse(fishery == 0, "0", "1")) %>% 
-  pivot_longer(c(diverse_pa, naturmaterial_pa, plast_pa, metall_pa, 
-                 glas_pa, gummi_pa, sup_pa, fishery_pa)) %>% 
+  mutate(plast_pa = ifelse(plast_a == 0, "0", "1"),
+         sup_pa = ifelse(sup_a == 0, "0", "1"),
+         fishery_pa = ifelse(fishery_a == 0, "0", "1"),
+         tot_pa = ifelse(tot_a == 0, "0", "1")) %>% 
+  pivot_longer(c(plast_pa, sup_pa, fishery_pa, tot_pa)) %>% 
   ggplot(aes(x = year, fill = value)) + 
   geom_bar() + 
   facet_wrap(~ name, ncol = 4) + 
   theme_plot() +
   theme(axis.text.x = element_text(angle = 90))
- 
-# Plot response variables (start with plastic)
-plot_map_west + 
-  geom_point(data = litterw, aes(X*1000, Y*1000, color = plast)) +
-  geom_sf(size = 0.1) +
-  scale_color_viridis(trans = "sqrt") +
-  facet_wrap(~year, ncol = 5) +
-  NULL
-
-ggplot(litterw, aes(plast)) + 
-  geom_histogram()
 ```
 
-# Save data
+## Baltic sea data
 
 ```{r}
-write_csv(litterw %>% filter(var == "biomass_density"), "data/west_coast_litter_biomass.csv")
-write_csv(litterw %>% filter(var == "numbers_density"), "data/west_coast_litter_numbers.csv")
+littere <- dat %>%
+  mutate(keep = ifelse(lon > 14, "Y", "N")) %>% 
+  filter(keep == "Y") %>% 
+  dplyr::select(-keep)
+
+plot_map_east + 
+  theme_plot(base_size = 14) +
+  geom_point(data = littere, aes(X*1000, Y*1000, color = trend_area)) +
+  geom_sf(size = 0.1) +  
+  facet_wrap(~year, ncol = 3) +
+  theme(axis.text.x = element_text(angle = 90))
+
+ggsave("figures/supp/e_coast_map.png", dpi = 300)
+
+# Plot proportion zero by litter category and year
+littere %>% 
+  mutate(plast_pa = ifelse(plast_a == 0, "0", "1"),
+         sup_pa = ifelse(sup_a == 0, "0", "1"),
+         fishery_pa = ifelse(fishery_a == 0, "0", "1"),
+         tot_pa = ifelse(tot_a == 0, "0", "1")) %>% 
+  pivot_longer(c(plast_pa, sup_pa, fishery_pa, tot_pa)) %>% 
+  ggplot(aes(x = year, fill = value)) + 
+  geom_bar() + 
+  facet_wrap(~ name, ncol = 4) + 
+  theme_plot() +
+  theme(axis.text.x = element_text(angle = 90))
+```
+
+## Save data
+
+```{r}
+write_csv(litterw, "data/west_coast_litter.csv")
+write_csv(littere, "data/east_coast_litter.csv")
 ```
