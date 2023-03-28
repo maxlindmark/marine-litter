@@ -1,5 +1,5 @@
 ---
-title: "Make prediction grid"
+title: "Make prediction grids"
 author: "Max Lindmark"
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
@@ -20,6 +20,8 @@ knitr::opts_chunk$set(
 )
 ```
 
+## Load libraries
+
 ```{r}
 # https://github.com/pbs-assess/gfvelocities/blob/main/R/make_prediction_grid.R
 
@@ -27,13 +29,18 @@ library(tidyverse)
 library(tidylog)
 library(sp)
 library(raster)
+library(terra)
 library(devtools)
 
 # Source code for map plots
 source_url("https://raw.githubusercontent.com/maxlindmark/marine-litter/main/R/functions/map-plot.R")
+```
 
+## West pred grid
+
+```{r}
 # Read west coast data
-litterw <- readr::read_csv("https://raw.githubusercontent.com/maxlindmark/marine-litter/main/data/west_coast_litter_biomass.csv")
+litterw <- readr::read_csv("https://raw.githubusercontent.com/maxlindmark/marine-litter/main/data/west_coast_litter.csv")
 
 x <- litterw$X
 y <- litterw$Y
@@ -81,46 +88,164 @@ pred_grid <- as.data.frame(pred_grid)
 
 plot_map_west +
   geom_point(data = pred_grid, aes(X*1000, Y*1000), size = 0.001, alpha = 0.5) +
-  facet_wrap(~year, ncol = 5) +
+  facet_wrap(~year, ncol = 3) +
   geom_sf(size = 0.1) +
   NULL
-```
 
-Add depth
+# Add lat and lon
+xy <- as.matrix(pred_grid %>% dplyr::select(X, Y) %>% mutate(X = X*1000, Y = Y*1000))
+v <- vect(xy, crs="+proj=utm +zone=33 +datum=WGS84  +units=m")
+y <- project(v, "+proj=longlat +datum=WGS84")
+lonlat <- geom(y)[, c("x", "y")]
 
-```{r}
-# Read the tifs
-west <- raster("data/depth_geo_tif/D5_2018_rgb-1.tif")
-#plot(west)
+pred_grid$lon <- lonlat[, 1]
+pred_grid$lat <- lonlat[, 2]
 
-east <- raster("data/depth_geo_tif/D6_2018_rgb-1.tif")
-# plot(east)
+ggplot(filter(pred_grid, year == 2017), aes(lon, lat)) + geom_point()
 
-dep_rast <- raster::merge(west, east)
+# Add ocean area
+# https://stackoverflow.com/questions/34272309/extract-shapefile-value-to-point-with-r
+# https://gis.ices.dk/sf/
+shape <- shapefile("data/assessment_areas_marine_waters/ANSSE_assessmentareas_20181116.shp")
+plot(shape)
+shape2 <- spTransform(shape, crs("+proj=longlat +datum=WGS84 +no_defs"))
+plot(shape2)
 
-# Reproject the raster to fit the UTM pred grid... Define spatial reference 
-sr <- "+proj=utm +zone=33  +datum=WGS84 +units=m " 
+pts <- SpatialPoints(cbind(pred_grid$lon, pred_grid$lat), 
+                     proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs"))
 
-projected_raster <- projectRaster(dep_rast, crs = sr)
+pred_grid$area <- over(pts, shape2)$MarUnitID
 
-pred_grid$depth <- raster::extract(projected_raster, pred_grid %>% dplyr::select(X, Y) %>% mutate(X = X*1000, Y = Y*1000))
+ggplot(filter(pred_grid, year == 2017), aes(lon, lat, color = area)) + geom_point()
 
-# Convert to depth (instead of elevation)
-ggplot(pred_grid, aes(X, Y, color = depth)) +
-  geom_point() +
-  coord_fixed()
+# Add depth
+dep_raster <- terra::rast("data/Mean depth natural colour (with land).nc")
 
-ggplot(pred_grid, aes(depth)) + geom_histogram()
-pred_grid$depth <- (pred_grid$depth - max(pred_grid$depth)) *-1
-ggplot(pred_grid, aes(depth)) + geom_histogram()
+crs(dep_raster, proj = TRUE)
 
-# Much better
-ggplot(pred_grid, aes(X, Y, color = depth)) +
-  geom_point() +
-  coord_fixed()
-```
+plot(dep_raster)
 
-```{r}
+pred_grid$depth <- terra::extract(dep_raster, pred_grid %>% dplyr::select(lon, lat))$elevation
+
+ggplot(pred_grid, aes(lon, lat, color = depth*-1)) + 
+  geom_point()
+
+pred_grid$depth <- pred_grid$depth*-1
+
+pred_grid <- pred_grid %>% drop_na(depth)
+
+plot_map_west + 
+  theme_plot(base_size = 14) +
+  geom_point(data = pred_grid, aes(X*1000, Y*1000, color = depth, alpha = area)) +
+  geom_sf(size = 0.1)
+
 # Save
 write_csv(pred_grid, "data/pred_grid_west.csv")
+```
+
+## East pred grid
+
+```{r}
+# Read east coast data
+littere <- readr::read_csv("https://raw.githubusercontent.com/maxlindmark/marine-litter/main/data/east_coast_litter.csv")
+
+x <- littere$X
+y <- littere$Y
+
+z <- chull(x, y)
+
+coords <- cbind(x[z], y[z])
+coords <- rbind(coords, coords[1, ])
+
+plot(coords[, 1] ~ coords[, 2]) # plot data
+
+sp_poly <- sp::SpatialPolygons(
+  list(sp::Polygons(list(sp::Polygon(coords)), ID = 1))
+  )
+
+sp_poly_df <- sp::SpatialPolygonsDataFrame(sp_poly,
+                                           data = data.frame(ID = 1)
+                                           )
+class(sp_poly_df)
+class(sp_poly)
+
+plot(sp_poly)
+plot(sp_poly_df)
+
+cell_width <- 2 # 2*2 km grid cell
+
+pred_grid <- expand.grid(
+  X = seq(min(littere$X), max(littere$X), cell_width),
+  Y = seq(min(littere$Y), max(littere$Y), cell_width),
+  year = unique(littere$year)
+  )
+
+# ggplot(pred_grid %>% filter(year == 2019), aes(X, Y)) +
+#   geom_point(size = 0.1) +
+#   theme_void() +
+#   coord_sf()
+
+sp::coordinates(pred_grid) <- c("X", "Y")
+
+inside <- !is.na(sp::over(pred_grid, as(sp_poly_df, "SpatialPolygons")))
+
+pred_grid <- pred_grid[inside, ]
+
+pred_grid <- as.data.frame(pred_grid)
+
+# plot_map_east +
+#   geom_point(data = pred_grid, aes(X*1000, Y*1000), size = 0.001, alpha = 0.5) +
+#   facet_wrap(~year, ncol = 3) +
+#   geom_sf(size = 0.1) +
+#   NULL
+
+# Add lat and lon
+xy <- as.matrix(pred_grid %>% dplyr::select(X, Y) %>% mutate(X = X*1000, Y = Y*1000))
+v <- vect(xy, crs="+proj=utm +zone=33 +datum=WGS84  +units=m")
+y <- project(v, "+proj=longlat +datum=WGS84")
+lonlat <- geom(y)[, c("x", "y")]
+
+pred_grid$lon <- lonlat[, 1]
+pred_grid$lat <- lonlat[, 2]
+
+ggplot(filter(pred_grid, year == 2017), aes(lon, lat)) + geom_point()
+
+# Add ocean area
+# https://stackoverflow.com/questions/34272309/extract-shapefile-value-to-point-with-r
+# https://gis.ices.dk/sf/
+shape <- shapefile("data/assessment_areas_marine_waters/BALSE_assessmentareas_20181116.shp")
+plot(shape)
+shape2 <- spTransform(shape, crs("+proj=longlat +datum=WGS84 +no_defs"))
+plot(shape2)
+
+pts <- SpatialPoints(cbind(pred_grid$lon, pred_grid$lat), 
+                     proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs"))
+
+pred_grid$area <- over(pts, shape2)$MarUnitID
+
+ggplot(filter(pred_grid, year == 2017), aes(lon, lat, color = area)) + geom_point()
+
+# Add depth
+dep_raster <- terra::rast("data/Mean depth natural colour (with land).nc")
+
+crs(dep_raster, proj = TRUE)
+
+plot(dep_raster)
+
+pred_grid$depth <- terra::extract(dep_raster, pred_grid %>% dplyr::select(lon, lat))$elevation
+
+ggplot(pred_grid, aes(lon, lat, color = depth*-1)) + 
+  geom_point()
+
+pred_grid$depth <- pred_grid$depth*-1
+
+pred_grid <- pred_grid %>% drop_na(depth)
+
+plot_map_east + 
+  theme_plot(base_size = 14) +
+  geom_point(data = pred_grid, aes(X*1000, Y*1000, color = depth, alpha = area)) +
+  geom_sf(size = 0.1)
+
+# Save
+write_csv(pred_grid, "data/pred_grid_east.csv")
 ```
