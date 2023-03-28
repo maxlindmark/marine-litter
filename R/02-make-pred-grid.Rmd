@@ -214,9 +214,9 @@ ggplot(filter(pred_grid, year == 2017), aes(lon, lat)) + geom_point()
 # https://stackoverflow.com/questions/34272309/extract-shapefile-value-to-point-with-r
 # https://gis.ices.dk/sf/
 shape <- shapefile("data/assessment_areas_marine_waters/BALSE_assessmentareas_20181116.shp")
-plot(shape)
+#plot(shape)
 shape2 <- spTransform(shape, crs("+proj=longlat +datum=WGS84 +no_defs"))
-plot(shape2)
+#plot(shape2)
 
 pts <- SpatialPoints(cbind(pred_grid$lon, pred_grid$lat), 
                      proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs"))
