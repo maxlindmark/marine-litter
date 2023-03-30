@@ -37,89 +37,9 @@ library(ggeffects)
 library(visreg)
 library(boot)
 
-# Source utm function
+# Source utm function and map plots
 source_url("https://raw.githubusercontent.com/maxlindmark/marine-litter/main/R/functions/lon-lat-utm.R")
-
-```
-
-# Make map plots
-
-```{r}
-# Normally I'd source code for map plots, but this caused errors when ggplotting when knitting only, not when running the for loop in a fresh session... 
-# change to url once we have the final one
-#source("/Users/maxlindmark/Dropbox/Max work/R/marine-litter/R/functions/map-plot.R")
-# Seem I have to run this to avoid error when knitting (the ggplotting inside the for loop)
-
-# Specify map ranges
-ymin = 54; ymax = 60; xmin = 2; xmax = 21
-
-map_data <- rnaturalearth::ne_countries(
-  scale = "medium",
-  returnclass = "sf",
-  continent = "europe")
-
-# Crop the polygon for plotting and efficiency:
-# st_bbox(map_data) # find the rough coordinates
-sf::sf_use_s2(FALSE)
-
-swe_coast <- suppressWarnings(suppressMessages(
-  st_crop(map_data,
-          c(xmin = xmin, ymin = ymin, xmax = xmax, ymax = ymax))))
-
-ggplot(swe_coast) + 
-  geom_sf()
-
-# Transform our map into UTM 33 coordinates, which is the equal-area projection we fit in:
-utm_zone33 <- 32633
-swe_coast_proj <- sf::st_transform(swe_coast, crs = utm_zone33)
-
-ggplot(swe_coast_proj) + 
-  geom_sf()
-
-# Define plotting theme for main plot
-theme_plot <- function(base_size = 11, base_family = "") {
-  theme_light(base_size = base_size, base_family = "") +
-    theme(
-      axis.text = element_text(color = "grey5"),
-      legend.position = "bottom",
-      legend.key.height = unit(0.2, "cm"),
-      legend.margin = margin(0, 0, 0, 0),
-      legend.box.margin = margin(-5, -5, -5, -5),
-      strip.background = element_rect(fill = "grey95"),
-      strip.text = element_text(color = "grey10"),
-      strip.text.x = element_text(margin = margin(b = 2, t = 2), color = "grey10", size = 10),
-      panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
-      panel.background = element_blank()
-      #, axis.line = element_line(colour = "grey20"),
-    )
-}
-
-# Make default base map plot
-#sf::st_boundary(swe_coast_proj)
-xmin2 <- -61896.44*1.005
-xmax2 <- 893074.5*0.91
-ymin2 <- 5983578*1.025
-ymax2 <- 6691902*0.99
-
-plot_map <-
-  ggplot(swe_coast_proj) +
-  xlim(xmin2, xmax2) +
-  ylim(ymin2, ymax2) +
-  labs(x = "Longitude", y = "Latitude") +
-  geom_sf(size = 0.3) +
-  theme(axis.text.x = element_text(angle = 90)) +
-  theme_plot() +
-  NULL
-
-plot_map_west <-
-  ggplot(swe_coast_proj) +
-  xlim(200000, xmax2*0.45) +
-  ylim(ymin2*1.015, ymax2*0.99) +
-  labs(x = "Longitude", y = "Latitude") +
-  geom_sf(size = 0.3) +
-  theme_plot() +
-  theme(axis.text.x = element_text(angle = 90)) +
-  NULL
+source_url("https://raw.githubusercontent.com/maxlindmark/marine-litter/main/R/functions/map-plot.R")
 ```
 
 # Read data
@@ -127,59 +47,38 @@ Filter litter categories that have enough data to work with (hard to fit models 
 
 ```{r}
 # Read and make data long so that I can for loop through all categories
-biom <- readr::read_csv("https://raw.githubusercontent.com/maxlindmark/marine-litter/main/data/west_coast_litter_biomass.csv") %>% 
+west <- readr::read_csv("https://raw.githubusercontent.com/maxlindmark/marine-litter/main/data/west_coast_litter.csv") %>% 
   mutate(year_f = as.factor(year),
          quarter_f = as.factor(quarter),
          depth_sc = (depth - mean(depth)) / sd(depth)) %>% 
-  rename(plastic = plast) %>% 
-  pivot_longer(c(plastic, sup, fishery),
-               names_to = "litter_category",
-               values_to = "density") %>% 
-  filter(litter_category %in% c("fishery", "plastic", "sup"))
+  pivot_longer(c("fishery_a", "fishery_b", "plast_a", "plast_b", "sup_a", "sup_b", "tot_a", "tot_b"),
+               names_to = "litter_category", values_to = "density") 
 
-num <- readr::read_csv("https://raw.githubusercontent.com/maxlindmark/marine-litter/main/data/west_coast_litter_numbers.csv") %>% 
-  mutate(year_f = as.factor(year),
-         quarter_f = as.factor(quarter),
-         depth_sc = (depth - mean(depth)) /sd(depth)) %>% 
-  rename(plastic = plast) %>% 
-  pivot_longer(c(plastic, sup, fishery),
-               names_to = "litter_category",
-               values_to = "density") %>% 
-  mutate(number = density * swept_area_km2) %>% 
-  filter(litter_category %in% c("fishery", "plastic", "sup"))
-
-binom <- readr::read_csv("https://raw.githubusercontent.com/maxlindmark/marine-litter/main/data/west_coast_litter_biomass.csv") %>% 
+east <- readr::read_csv("https://raw.githubusercontent.com/maxlindmark/marine-litter/main/data/east_coast_litter.csv") %>% 
   mutate(year_f = as.factor(year),
          quarter_f = as.factor(quarter),
          depth_sc = (depth - mean(depth)) / sd(depth)) %>% 
-  rename(other = diverse,
-         natural = naturmaterial,
-         glass = glas,
-         metal = metall,
-         rubber = gummi) %>% 
-  pivot_longer(c(other, natural, glass, metal, rubber),
-               names_to = "litter_category",
-               values_to = "density") %>% 
-  filter(!litter_category %in% c("fishery", "plastic", "sup")) %>% 
-  mutate(present = ifelse(density == 0, 0, 1))
+  pivot_longer(c("fishery_a", "fishery_b", "plast_a", "plast_b", "sup_a", "sup_b", "tot_a", "tot_b"),
+               names_to = "litter_category", values_to = "density")
 
-# Load pred grid
+# Load pred grids
 pred_grid_west <- read_csv("data/pred_grid_west.csv") %>% 
   mutate(year_f = as.factor(year),
          quarter_f = as.factor(1),
-         depth_sc = (depth - mean(num$depth)) / sd(num$depth)) %>% 
+         depth_sc = (depth - mean(west$depth)) / sd(west$depth)) %>% 
+  mutate(X = X*1000,
+         Y = Y*1000) %>% 
+  drop_na(area)
+
+# ggplot(pred_grid_west, aes(X*1000, Y*1000, color = area)) + 
+#   geom_point()
+  
+pred_grid_east <- read_csv("data/pred_grid_east.csv") %>% 
+  mutate(year_f = as.factor(year),
+         quarter_f = as.factor(1),
+         depth_sc = (depth - mean(east$depth)) / sd(east$depth)) %>% 
   mutate(X = X*1000,
          Y = Y*1000)
-
-# hist(pred_grid_west$depth_sc)
-# hist(pred_grid_west$depth)
-# sd(pred_grid_west$depth)
-
-plot_map_west + 
-  theme_plot(base_size = 14) +
-  geom_point(data = pred_grid_west, aes(X, Y), alpha = 0.5, size = 0.01) 
-
-ggsave("figures/supp/pred_grid.png", dpi = 300)
 ```
 
 # Fit models
@@ -192,288 +91,17 @@ For plastic, sup and fishery I have enough data to fit spatial models with both 
 # max.edge <- mean(c(diff(range(num$X)), diff(range(num$Y)))) / 15
 # cutoff <- max.edge/5
 
-mesh <- make_mesh(num %>% filter(litter_category == "sup"), c("X", "Y"), cutoff = 4)
+west_mesh <- make_mesh(west %>% filter(litter_category == "fishery_a"), c("X", "Y"), cutoff = 4)
 #mesh <- make_mesh(num %>% filter(litter_category == "sup"), c("X", "Y"), type = "kmeans", n_knots = 50)
-plot(mesh)
-```
+plot(west_mesh)
 
-### Test model to see 
-
-```{r first test to check residual correlation}
-
-    dd <- biom %>%
-        filter(litter_category == "fishery") %>%
-        droplevels()
-
-    m0 <- sdmTMB(
-      data = dd,
-      formula = density ~ 0 + year_f + depth_sc,
-      mesh = mesh,
-      family = tweedie(),
-      spatial = "off",
-      time = "year",
-      spatiotemporal = "off"
-      )
-
-    dd$m0_resids <- residuals(m0) # randomized quantile residuals
-
-    hist(dd$m0_resids)
-    
-    m1 <- sdmTMB(
-      data = dd,
-      formula = density ~ 0 + year_f + depth_sc,
-      mesh = mesh,
-      family = tweedie(),
-      spatial = "on",
-      time = "year",
-      spatiotemporal = "IID"
-      )
-
-    dd$m1_resids <- residuals(m1) # randomized quantile residuals
-
-    dd2 <- dd %>%
-      pivot_longer(c(m0_resids, m1_resids))
-
-    ggplot(dd2 %>% filter(value > -3 & value < 3), aes(X, Y, col = value)) +
-      scale_colour_gradient2() +
-      geom_point(size = 2) +
-      facet_grid(name~year) +
-      theme_minimal() +
-      coord_fixed() +
-      theme(panel.grid.major = element_blank(),
-            panel.grid.minor = element_blank(),
-            panel.background = element_blank())
-
-    # Check spatial autocorrelation
-    pred_fixed <- predict(m0)$est
-    s <- simulate(m0, nsim = 500)
-    r <- DHARMa::createDHARMa(
-      simulatedResponse = s,
-      observedResponse = dd$density,
-      fittedPredictedResponse = pred_fixed
-      )
-    plot(r)
-    DHARMa::testSpatialAutocorrelation(r, x = dd$X, y = dd$Y)
-
-    # In this case, it doesn't seem like a very clear spatial correlation
-
-    print(m1)
-        
-```
-
-## Binomial models
-
-```{r}
-data_list_coef <- list()
-data_list_pred <- list()
-
-# Year as a random effect because in some years we don't have any observations at all of presences
-
-for(i in unique(binom$litter_category)) {
-    
-    dd <- binom %>%
-        filter(litter_category == i) %>%
-        droplevels()
-    
-    m <- sdmTMB(
-      data = dd,
-      formula = present ~ depth_sc + (1|year_f),
-      offset = dd$swept_area_km2, #log
-      mesh = mesh,
-      family = binomial(link = "logit"),
-      spatial = "off",
-      time = "year",
-      spatiotemporal = "off",
-      control = sdmTMBcontrol(newton_loops = 1),
-      )
-    
-    sanity(m)
-    tidy(m, conf.int = TRUE)
-    
-    data_list_coef[[i]] <- tidy(m, conf.int = TRUE) %>% mutate(model = paste("binom", i, sep = "_"))
-
-    # Plot residuals
-    mcmc_res <- residuals(m, type = "mle-mcmc", mcmc_iter = 201, mcmc_warmup = 200)
-    qqnorm(mcmc_res, asp = 1, main = paste("Normal Q-Q Plot", i, sep = " "))
-    qqline(mcmc_res)
-    
-    # Check for spatial autocorrelation
-    pred_fixed <- m$family$linkinv(predict(m)$est)
-    s <- simulate(m, nsim = 500)
-    r <- DHARMa::createDHARMa(
-      simulatedResponse = s,
-      observedResponse = dd$present,
-      fittedPredictedResponse = pred_fixed
-      )
-    plot(r)
-    DHARMa::testSpatialAutocorrelation(r, x = dd$X, y = dd$Y)
-    
-    # Plot conditional/marginal effects
-    visreg(m, xvar = "year_f", scale = "response")
-    
-    nd <- data.frame(
-      depth_sc = mean(dd$depth_sc),
-      year = unique(as.integer(as.character(dd$year_f)))) %>%
-      mutate(year_f = as.factor(year),
-             X = 0,
-             Y = 0)
-
-    p <- predict(m, newdata = nd, se_fit = TRUE, re_form = NULL)
-    
-    print(ggplot(p, aes(year, inv.logit(est),
-                  ymin = inv.logit(est - 1.96 * est_se),
-                  ymax = inv.logit(est + 1.96 * est_se)
-                  )) +
-      geom_line() +
-      geom_ribbon(alpha = 0.4) +
-      coord_cartesian(expand = F))
-    
-    data_list_pred[[i]] <- p %>% mutate(model = i)
-    
-    # Save model object
-    saveRDS(m, paste("output/models/binom_", i, ".rds", sep = ""))
-    
-    print(ggplot(p, aes(year, y = inv.logit(est), ymax = inv.logit(est + 1.96*est_se), ymin = inv.logit(est - 1.96*est_se))) +
-      geom_line() +
-      geom_line(data = dd %>%
-                  group_by(year) %>%
-                  summarise(present = mean(present)),
-                aes(year, present, color = "Data (mean)"), linetype = 2,
-                inherit.aes = FALSE) + # Add data
-      geom_ribbon(alpha = 0.2) +
-      scale_color_brewer(palette = "Set1", name = "") +
-      scale_x_continuous(breaks = scales::pretty_breaks(n = 10)) + 
-      theme_plot() +
-      xlab('Year') +
-      ylab('Mean estimate') +
-      NULL)
-    
-    ggsave(paste("figures/supp/mean_pred_comp_binom_", i, ".png", sep = ""), dpi = 300)
-    
-}
-
-# Save predictions and sims as data frames
-dat_coef_binom <- dplyr::bind_rows(data_list_coef)
-dat_pred_binom <- dplyr::bind_rows(data_list_pred)
-
-write_csv(dat_coef_binom, "output/dat_coef_binom.csv")
-write_csv(dat_pred_binom, "output/dat_pred_binom.csv")
-```
-
-## Poisson/negative binomial models
-
-```{r}
-data_list_coef <- list()
-data_list_pred <- list()
-data_list_sim <- list()
-data_list_sims <- list()
-
-for(i in unique(num$litter_category)) {
-    
-    dd <- num %>%
-        filter(litter_category == i) %>%
-        droplevels()
-    
-    m <- sdmTMB(
-      data = dd,
-      formula = number ~ -1 + year_f + depth_sc,
-      mesh = mesh,
-      offset = dd$swept_area_km2, #should be log
-      family = nbinom2(link = "log"),
-      spatial = "on",
-      time = "year",
-      spatiotemporal = "off",
-      control = sdmTMBcontrol(newton_loops = 1)
-      )
-    
-    sanity(m)
-    tidy(m, conf.int = TRUE)
-    data_list_coef[[i]] <- tidy(m, conf.int = TRUE) %>% mutate(model = paste("poisson", i, sep = "_"))
-
-    # Plot residuals
-    mcmc_res <- residuals(m, type = "mle-mcmc", mcmc_iter = 201, mcmc_warmup = 200)
-    qqnorm(mcmc_res, asp = 1, main = paste("Normal Q-Q Plot", i, sep = " "))
-    qqline(mcmc_res)
-    
-    # Plot conditional/marginal effects
-    visreg(m, xvar = "year_f", scale = "response")
-
-    # Save model object
-    saveRDS(m, paste("output/models/numbers_", i, ".rds", sep = ""))
-    
-    # Predict on grid
-    pred <- predict(m, newdata = pred_grid_west) %>% 
-      mutate(model = i)
-    
-    data_list_pred[[i]] <- pred
-  
-    # Get sims
-    ncells <- filter(pred_grid_west, year == max(pred_grid_west$year)) %>% nrow()
-    nsim <- 500
-    sim <- predict(m, newdata = pred_grid_west, nsim = nsim)
-    
-    # Plot CV in space
-    # Just plot last year
-    sim_last <- sim[pred_grid_west$year == max(pred_grid_west$year), ]
-    
-    pred_last <- pred[pred$year == max(pred_grid_west$year), ]
-    pred_last$cv <- round(apply(exp(sim_last), 1, function(x) sd(x) / mean(x)), 2)
-    
-    print(plot_map_west + 
-      geom_raster(data = pred_last, aes(X, Y, fill = cv)) +
-      scale_fill_viridis_c() + 
-      geom_sf(size = 0.1) + 
-      NULL)
-    
-    ggsave(paste("figures/supp/cv_numbers_", i, ".png", sep = ""))
-    
-    # Get index & full index (i.e. returning all sims)
-    index_sim <- get_index_sims(sim,
-                                area = rep(1/ncells, nrow(sim))) %>% mutate(model = i) # Note that we just get the means here
-    
-    data_list_sim[[i]] <- index_sim
-    
-    index_sim_full <- get_index_sims(sim,
-                                     area = rep(1/ncells, nrow(sim)),
-                                     return_sims = TRUE) %>% mutate(model = i) # Note that we just get the means here
-    
-    data_list_sims[[i]] <- index_sim_full
-    
-    
-    # See how mean index compares to data
-    
-    print(ggplot(index_sim, aes(year, y = est, ymin = lwr, ymax = upr)) +
-      geom_line() +
-      geom_line(data = dd %>%
-                  group_by(year) %>%
-                  summarise(mean_number = mean(number)),
-                aes(year, mean_number, color = "Data (mean)"), linetype = 2,
-                inherit.aes = FALSE) + # Add data
-      geom_ribbon(alpha = 0.2) +
-      scale_color_brewer(palette = "Set1", name = "") +
-      scale_x_continuous(breaks = scales::pretty_breaks(n = 10)) + 
-      theme_plot() +
-      xlab('Year') +
-      ylab('Mean estimate') +
-      NULL)
-    
-    ggsave(paste("figures/supp/mean_pred_comp_num_", i, ".png", sep = ""), dpi = 300)
-    
-}
-
-# Save predictions and sims as data frames
-dat_coef_num <- dplyr::bind_rows(data_list_coef)
-dat_pred_num <- dplyr::bind_rows(data_list_pred)
-dat_sim_num <- dplyr::bind_rows(data_list_sim)
-dat_sims_num <- dplyr::bind_rows(data_list_sims)
-
-write_csv(dat_coef_num, "output/dat_coef_num.csv")
-write_csv(dat_pred_num, "output/dat_pred_num.csv")
-write_csv(dat_sim_num, "output/dat_sim_num.csv")
-write_csv(dat_sims_num, "output/dat_sims_num.csv")
+east_mesh <- make_mesh(east %>% filter(litter_category == "fishery_a"), c("X", "Y"), cutoff = 4)
+#mesh <- make_mesh(num %>% filter(litter_category == "sup"), c("X", "Y"), type = "kmeans", n_knots = 50)
+plot(east_mesh)
 ```
 
 ## Fit tweedie biomass density models
+### East coast
 
 ```{r}
 data_list_coef <- list()
@@ -481,16 +109,16 @@ data_list_pred <- list()
 data_list_sim <- list()
 data_list_sims <- list()
 
-for(i in unique(biom$litter_category)) {
+for(i in unique(east$litter_category)) {
     
-    dd <- biom %>%
+    dd <- east %>%
         filter(litter_category == i) %>%
         droplevels()
     
     m <- sdmTMB(
       data = dd,
       formula = density ~ 0 + year_f + depth_sc,
-      mesh = mesh,
+      mesh = east_mesh,
       family = tweedie(),
       spatial = "on",
       time = "year",
@@ -499,8 +127,7 @@ for(i in unique(biom$litter_category)) {
     
     sanity(m)
     tidy(m, conf.int = TRUE)
-    data_list_coef[[i]] <- tidy(m, conf.int = TRUE) %>% mutate(model = paste("tweedie", i, sep = "_"))
-
+    data_list_coef[[i]] <- tidy(m, conf.int = TRUE) %>% mutate(model = paste("east", i, sep = "_"))
     
     # Plot residuals
     mcmc_res <- residuals(m, type = "mle-mcmc", mcmc_iter = 201, mcmc_warmup = 200)
@@ -508,42 +135,154 @@ for(i in unique(biom$litter_category)) {
     qqline(mcmc_res)
     
     # Save model object
-    saveRDS(m, paste("output/models/biomass_", i, ".rds", sep = ""))
+    saveRDS(m, paste("output/models/east_", i, ".rds", sep = ""))
     
     # Predict on grid
-    pred <- predict(m, newdata = pred_grid_west) %>% 
+    pred <- predict(m, newdata = pred_grid_east) %>% 
       mutate(model = i)
     
     data_list_pred[[i]] <- pred
   
     # Get sims
     nsim <- 500
-    sim <- predict(m, newdata = pred_grid_west, nsim = nsim)
+    sim <- predict(m, newdata = pred_grid_east, nsim = nsim)
     
     # Plot CV in space
     # Just plot last year
-    sim_last <- sim[pred_grid_west$year == max(pred_grid_west$year), ]
-    
-    pred_last <- pred[pred$year == max(pred_grid_west$year), ]
-    pred_last$cv <- round(apply(exp(sim_last), 1, function(x) sd(x) / mean(x)), 2)
-    
-    print(plot_map_west + 
-      geom_raster(data = pred_last, aes(X, Y, fill = cv)) +
-      scale_fill_viridis_c() + 
-      geom_sf(size = 0.1) + 
-      NULL)
-    
-    ggsave(paste("figures/supp/cv_biomass_", i, ".png", sep = ""))
+    # sim_last <- sim[pred_grid_east$year == max(pred_grid_east$year), ]
+    # 
+    # pred_last <- pred[pred$year == max(pred_grid_east$year), ]
+    # pred_last$cv <- round(apply(exp(sim_last), 1, function(x) sd(x) / mean(x)), 2)
+    # 
+    # print(plot_map_east + 
+    #   geom_raster(data = pred_last, aes(X, Y, fill = cv)) +
+    #   scale_fill_viridis_c() + 
+    #   geom_sf(size = 0.1) + 
+    #   NULL)
+    # 
+    # ggsave(paste("figures/supp/cv_biomass_", i, ".png", sep = ""))
     
     # Get index & full index (i.e. returning all sims)
     index_sim <- get_index_sims(sim,
-                                area = rep(2*2, nrow(sim))) %>% mutate(model = i)
+                                area = rep(2*2, nrow(sim))) %>% mutate(model = paste("east", i, sep = "_"))
     
     data_list_sim[[i]] <- index_sim
     
     index_sim_full <- get_index_sims(sim,
                                      area = rep(2*2, nrow(sim)),
-                                     return_sims = TRUE) %>% mutate(model = i)
+                                     return_sims = TRUE) %>% mutate(model = paste("east", i, sep = "_"))
+    
+    data_list_sims[[i]] <- index_sim_full
+    
+    
+    # See how mean index compares to data
+    ncells <- filter(pred_grid_east, year == max(pred_grid_east$year)) %>% nrow()
+    
+    index_sim_avg <- get_index_sims(sim, area = rep(1/ncells, nrow(sim)))
+    #index_sim2 <- index_sim %>% mutate(est2 = est/(ncells * 2*2))
+    
+    print(ggplot(index_sim_avg, aes(year, y = est, ymin = lwr, ymax = upr)) +
+      geom_line() +
+      # geom_line(data = index_sim2, aes(year, est2), color = "green", linetype = 2, size = 2, alpha = 0.6, inherit.aes = FALSE) +
+      geom_line(data = dd %>%
+                  group_by(year) %>%
+                  summarise(mean_density = mean(density)),
+                aes(year, mean_density, color = "Data (mean)"), linetype = 2,
+                inherit.aes = FALSE) + # Add data
+      geom_ribbon(alpha = 0.2) +
+      scale_color_brewer(palette = "Set1", name = "") +
+      scale_x_continuous(breaks = scales::pretty_breaks(n = 10)) + 
+      theme_plot() +
+      xlab('Year') +
+      ylab('Mean density') +
+      NULL)
+    
+    ggsave(paste("figures/supp/east_mean_pred_comp_", i, ".png", sep = ""), dpi = 300)
+    
+}
+
+# Save predictions and sims as data frames
+dat_coef_biom <- dplyr::bind_rows(data_list_coef)
+dat_pred_biom <- dplyr::bind_rows(data_list_pred)
+dat_sim_biom <- dplyr::bind_rows(data_list_sim)
+dat_sims_biom <- dplyr::bind_rows(data_list_sims)
+
+write_csv(dat_coef_biom, "output/east_dat_coef.csv")
+write_csv(dat_pred_biom, "output/east_dat_pred.csv")
+write_csv(dat_sim_biom, "output/east_dat_sim.csv")
+write_csv(dat_sims_biom, "output/east_dat_sims.csv")
+```
+
+### West coast
+
+```{r}
+data_list_coef <- list()
+data_list_pred <- list()
+data_list_sim <- list()
+data_list_sims <- list()
+
+for(i in unique(west$litter_category)) {
+    
+    dd <- west %>%
+        filter(litter_category == i) %>%
+        droplevels()
+    
+    m <- sdmTMB(
+      data = dd,
+      formula = density ~ 0 + year_f + depth_sc,
+      mesh = west_mesh,
+      family = tweedie(),
+      spatial = "on",
+      time = "year",
+      spatiotemporal = "off"
+      )
+    
+    sanity(m)
+    tidy(m, conf.int = TRUE)
+    data_list_coef[[i]] <- tidy(m, conf.int = TRUE) %>% mutate(model = paste("west", i, sep = "_"))
+    
+    # Plot residuals
+    mcmc_res <- residuals(m, type = "mle-mcmc", mcmc_iter = 201, mcmc_warmup = 200)
+    qqnorm(mcmc_res, asp = 1, main = paste("Normal Q-Q Plot", i, sep = " "))
+    qqline(mcmc_res)
+    
+    # Save model object
+    saveRDS(m, paste("output/models/west_", i, ".rds", sep = ""))
+    
+    # Predict on grid
+    pred <- predict(m, newdata = pred_grid_west) %>% 
+      mutate(model = i)
+    
+    data_list_pred[[i]] <- pred
+  
+    # Get sims
+    nsim <- 500
+    sim <- predict(m, newdata = pred_grid_west, nsim = nsim)
+    
+    # Plot CV in space
+    # Just plot last year
+    # sim_last <- sim[pred_grid_west$year == max(pred_grid_west$year), ]
+    # 
+    # pred_last <- pred[pred$year == max(pred_grid_west$year), ]
+    # pred_last$cv <- round(apply(exp(sim_last), 1, function(x) sd(x) / mean(x)), 2)
+    # 
+    # print(plot_map_west + 
+    #   geom_raster(data = pred_last, aes(X, Y, fill = cv)) +
+    #   scale_fill_viridis_c() + 
+    #   geom_sf(size = 0.1) + 
+    #   NULL)
+    # 
+    # ggsave(paste("figures/supp/cv_biomass_", i, ".png", sep = ""))
+    
+    # Get index & full index (i.e. returning all sims)
+    index_sim <- get_index_sims(sim,
+                                area = rep(2*2, nrow(sim))) %>% mutate(model = paste("west", i, sep = "_"))
+    
+    data_list_sim[[i]] <- index_sim
+    
+    index_sim_full <- get_index_sims(sim,
+                                     area = rep(2*2, nrow(sim)),
+                                     return_sims = TRUE) %>% mutate(model = paste("west", i, sep = "_"))
     
     data_list_sims[[i]] <- index_sim_full
     
@@ -565,10 +304,10 @@ for(i in unique(biom$litter_category)) {
       scale_x_continuous(breaks = scales::pretty_breaks(n = 10)) + 
       theme_plot() +
       xlab('Year') +
-      ylab('Mean biomass estimate (kg)') +
+      ylab('Mean density') +
       NULL)
     
-    ggsave(paste("figures/supp/mean_pred_comp_biomass_", i, ".png", sep = ""), dpi = 300)
+    ggsave(paste("figures/supp/west_mean_pred_comp_", i, ".png", sep = ""), dpi = 300)
     
 }
 
@@ -578,9 +317,8 @@ dat_pred_biom <- dplyr::bind_rows(data_list_pred)
 dat_sim_biom <- dplyr::bind_rows(data_list_sim)
 dat_sims_biom <- dplyr::bind_rows(data_list_sims)
 
-write_csv(dat_coef_biom, "output/dat_coef_biomass.csv")
-write_csv(dat_pred_biom, "output/dat_pred_biomass.csv")
-write_csv(dat_sim_biom, "output/dat_sim_biomass.csv")
-write_csv(dat_sims_biom, "output/dat_sims_biomass.csv")
+write_csv(dat_coef_biom, "output/west_dat_coef.csv")
+write_csv(dat_pred_biom, "output/west_dat_pred.csv")
+write_csv(dat_sim_biom, "output/west_dat_sim.csv")
+write_csv(dat_sims_biom, "output/west_dat_sims.csv")
 ```
-
