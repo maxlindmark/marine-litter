@@ -134,9 +134,6 @@ for(i in unique(east$litter_category)) {
     qqnorm(mcmc_res, asp = 1, main = paste("Normal Q-Q Plot", i, sep = " "))
     qqline(mcmc_res)
     
-    # Save model object
-    saveRDS(m, paste("output/models/east_", i, ".rds", sep = ""))
-    
     # Predict on grid
     pred <- predict(m, newdata = pred_grid_east) %>% 
       mutate(model = i)
@@ -146,21 +143,6 @@ for(i in unique(east$litter_category)) {
     # Get sims
     nsim <- 500
     sim <- predict(m, newdata = pred_grid_east, nsim = nsim)
-    
-    # Plot CV in space
-    # Just plot last year
-    # sim_last <- sim[pred_grid_east$year == max(pred_grid_east$year), ]
-    # 
-    # pred_last <- pred[pred$year == max(pred_grid_east$year), ]
-    # pred_last$cv <- round(apply(exp(sim_last), 1, function(x) sd(x) / mean(x)), 2)
-    # 
-    # print(plot_map_east + 
-    #   geom_raster(data = pred_last, aes(X, Y, fill = cv)) +
-    #   scale_fill_viridis_c() + 
-    #   geom_sf(size = 0.1) + 
-    #   NULL)
-    # 
-    # ggsave(paste("figures/supp/cv_biomass_", i, ".png", sep = ""))
     
     # Get index & full index (i.e. returning all sims)
     index_sim <- get_index_sims(sim,
@@ -179,11 +161,9 @@ for(i in unique(east$litter_category)) {
     ncells <- filter(pred_grid_east, year == max(pred_grid_east$year)) %>% nrow()
     
     index_sim_avg <- get_index_sims(sim, area = rep(1/ncells, nrow(sim)))
-    #index_sim2 <- index_sim %>% mutate(est2 = est/(ncells * 2*2))
     
     print(ggplot(index_sim_avg, aes(year, y = est, ymin = lwr, ymax = upr)) +
       geom_line() +
-      # geom_line(data = index_sim2, aes(year, est2), color = "green", linetype = 2, size = 2, alpha = 0.6, inherit.aes = FALSE) +
       geom_line(data = dd %>%
                   group_by(year) %>%
                   summarise(mean_density = mean(density)),
@@ -202,15 +182,15 @@ for(i in unique(east$litter_category)) {
 }
 
 # Save predictions and sims as data frames
-dat_coef_biom <- dplyr::bind_rows(data_list_coef)
-dat_pred_biom <- dplyr::bind_rows(data_list_pred)
-dat_sim_biom <- dplyr::bind_rows(data_list_sim)
-dat_sims_biom <- dplyr::bind_rows(data_list_sims)
+dat_coef <- dplyr::bind_rows(data_list_coef)
+dat_pred <- dplyr::bind_rows(data_list_pred)
+dat_sim <- dplyr::bind_rows(data_list_sim)
+dat_sims <- dplyr::bind_rows(data_list_sims)
 
-write_csv(dat_coef_biom, "output/east_dat_coef.csv")
-write_csv(dat_pred_biom, "output/east_dat_pred.csv")
-write_csv(dat_sim_biom, "output/east_dat_sim.csv")
-write_csv(dat_sims_biom, "output/east_dat_sims.csv")
+write_csv(dat_coef, "output/east_dat_coef.csv")
+write_csv(dat_pred, "output/east_dat_pred.csv")
+write_csv(dat_sim, "output/east_dat_sim.csv")
+write_csv(dat_sims, "output/east_dat_sims.csv")
 ```
 
 ### West coast
@@ -246,8 +226,6 @@ for(i in unique(west$litter_category)) {
     qqnorm(mcmc_res, asp = 1, main = paste("Normal Q-Q Plot", i, sep = " "))
     qqline(mcmc_res)
     
-    # Save model object
-    saveRDS(m, paste("output/models/west_", i, ".rds", sep = ""))
     
     # Predict on grid
     pred <- predict(m, newdata = pred_grid_west) %>% 
@@ -258,21 +236,6 @@ for(i in unique(west$litter_category)) {
     # Get sims
     nsim <- 500
     sim <- predict(m, newdata = pred_grid_west, nsim = nsim)
-    
-    # Plot CV in space
-    # Just plot last year
-    # sim_last <- sim[pred_grid_west$year == max(pred_grid_west$year), ]
-    # 
-    # pred_last <- pred[pred$year == max(pred_grid_west$year), ]
-    # pred_last$cv <- round(apply(exp(sim_last), 1, function(x) sd(x) / mean(x)), 2)
-    # 
-    # print(plot_map_west + 
-    #   geom_raster(data = pred_last, aes(X, Y, fill = cv)) +
-    #   scale_fill_viridis_c() + 
-    #   geom_sf(size = 0.1) + 
-    #   NULL)
-    # 
-    # ggsave(paste("figures/supp/cv_biomass_", i, ".png", sep = ""))
     
     # Get index & full index (i.e. returning all sims)
     index_sim <- get_index_sims(sim,
@@ -299,7 +262,6 @@ for(i in unique(west$litter_category)) {
                   summarise(mean_density = mean(density)),
                 aes(year, mean_density, color = "Data (mean)"), linetype = 2,
                 inherit.aes = FALSE) + # Add data
-      #geom_ribbon(alpha = 0.2) +
       scale_color_brewer(palette = "Set1", name = "") +
       scale_x_continuous(breaks = scales::pretty_breaks(n = 10)) + 
       theme_plot() +
@@ -312,13 +274,222 @@ for(i in unique(west$litter_category)) {
 }
 
 # Save predictions and sims as data frames
-dat_coef_biom <- dplyr::bind_rows(data_list_coef)
-dat_pred_biom <- dplyr::bind_rows(data_list_pred)
-dat_sim_biom <- dplyr::bind_rows(data_list_sim)
-dat_sims_biom <- dplyr::bind_rows(data_list_sims)
+dat_coef <- dplyr::bind_rows(data_list_coef)
+dat_pred <- dplyr::bind_rows(data_list_pred)
+dat_sim <- dplyr::bind_rows(data_list_sim)
+dat_sims <- dplyr::bind_rows(data_list_sims)
 
-write_csv(dat_coef_biom, "output/west_dat_coef.csv")
-write_csv(dat_pred_biom, "output/west_dat_pred.csv")
-write_csv(dat_sim_biom, "output/west_dat_sim.csv")
-write_csv(dat_sims_biom, "output/west_dat_sims.csv")
+write_csv(dat_coef, "output/west_dat_coef.csv")
+write_csv(dat_pred, "output/west_dat_pred.csv")
+write_csv(dat_sim, "output/west_dat_sim.csv")
+write_csv(dat_sims, "output/west_dat_sims.csv")
+```
+
+## Fit tweedie biomass density models with year as continious and interaction with time period
+
+### East coast
+
+```{r}
+data_list_pred <- list()
+data_list_coef <- list()
+
+for(i in unique(east$litter_category)) {
+    
+    dd <- east %>%
+      filter(litter_category == i) %>%
+      mutate(time_period = ifelse(year < 2016, "1", "2"),
+             time_period = as.factor(time_period),
+             year_ct = year - 2013) %>% 
+      droplevels()
+    
+    # Whole time period  
+    m1 <- sdmTMB(
+      data = dd,
+      formula = density ~ year_ct + depth_sc,
+      mesh = east_mesh,
+      family = tweedie(),
+      spatial = "on",
+      spatiotemporal = "off"
+      )
+    
+    # Interaction
+    m2 <- sdmTMB(
+      data = dd,
+      formula = density ~ year_ct*time_period + depth_sc,
+      mesh = east_mesh,
+      family = tweedie(),
+      spatial = "on",
+      spatiotemporal = "off"
+      )
+    
+    sanity(m1)
+    sanity(m2)
+    
+    tidy(m1)
+    tidy(m2)
+    
+    temp_m1 <- tidy(m1, conf.int = TRUE) 
+    temp_m2 <- tidy(m2, conf.int = TRUE) 
+    
+    nd <- data.frame(year = 2013:2021) %>%
+      mutate(depth_sc = mean(dd$depth_sc),
+             year_ct = year - 2013,
+             time_period = ifelse(year < 2016, "1", "2"),
+             time_period = as.factor(time_period))
+
+    m1_preds <- predict(m1, newdata = nd, re_form = NA, re_form_iid = NA)
+    m2_preds <- predict(m2, newdata = nd, re_form = NA, re_form_iid = NA)
+    
+    nd$pred_m1 <- m1_preds$est
+    nd$pred_m2 <- m2_preds$est
+    
+    nd2 <- nd %>% pivot_longer(c(pred_m1, pred_m2))
+    
+    # Add sig or not
+    nd2 <- nd2 %>% 
+      mutate(sig_slope = "No",
+             sig_slope = ifelse(name == "pred_m1" & temp_m1$conf.low[2] > 0 & temp_m1$conf.high[2] > 0, "Yes", sig_slope),
+             sig_slope = ifelse(name == "pred_m1" & temp_m1$conf.low[2] < 0 & temp_m1$conf.high[2] < 0, "Yes", sig_slope)) %>% 
+      
+      mutate(sig_slope = ifelse(name == "pred_m2" & year < 2016 & temp_m2$conf.low[2] > 0 & temp_m2$conf.high[2] > 0, "Yes", sig_slope),
+             sig_slope = ifelse(name == "pred_m2" & year < 2016 & temp_m2$conf.low[2] < 0 & temp_m2$conf.high[2] < 0, "Yes", sig_slope),
+             
+             sig_slope = ifelse(name == "pred_m2" & year > 2015 & temp_m2$conf.low[2] + temp_m2$conf.low[5] > 0 &
+                                  temp_m2$conf.high[2] + temp_m2$conf.low[5] > 0, "Yes", sig_slope),
+             sig_slope = ifelse(name == "pred_m2" & year > 2015 & temp_m2$conf.low[2] + temp_m2$conf.low[5] < 0 &
+                                  temp_m2$conf.high[2] + temp_m2$conf.low[5] < 0, "Yes", sig_slope))
+    
+    # ggplot() + 
+    #   geom_point(data = dd, aes(year, density)) + 
+    #   geom_line(data = nd2, aes(year, exp(value), color = name, linetype = sig_slope)) + 
+    #   scale_linetype_manual(values = c(2, 1)) + 
+    #   coord_cartesian(ylim = c(0, 10))
+    
+    nd2 <- nd2 %>% mutate(model = paste("east", i, sep = "_"))
+    
+    data_list_pred[[i]] <- nd2
+    
+    # Significant interaction?
+    int <- filter(temp_m2, term == "year_ct:time_period2")
+    inter <- data.frame(model = paste("east", i, sep = "_")) %>%
+      mutate(sig = "No",
+             sig = ifelse(int$conf.low > 0 & int$conf.high > 0, "Yes", sig),
+             sig = ifelse(int$conf.low < 0 & int$conf.high < 0, "Yes", sig))
+
+    data_list_coef[[i]] <- inter
+    
+    # Plot residuals
+    # mcmc_res <- residuals(m, type = "mle-mcmc", mcmc_iter = 201, mcmc_warmup = 200)
+    # qqnorm(mcmc_res, asp = 1, main = paste("Normal Q-Q Plot", i, sep = " "))
+    # qqline(mcmc_res)
+    
+}
+
+# Save predictions
+dat_pred <- dplyr::bind_rows(data_list_pred)
+dat_coef <- dplyr::bind_rows(data_list_coef)
+
+write_csv(dat_pred, "output/yr_cont_east_dat_pred.csv")
+write_csv(dat_coef, "output/yr_cont_inter_east_dat_pred.csv")
+```
+
+### West coast
+
+```{r}
+data_list_pred <- list()
+data_list_coef <- list()
+
+for(i in unique(west$litter_category)) {
+    
+    dd <- west %>%
+      filter(litter_category == i) %>%
+      mutate(time_period = ifelse(year < 2016, "1", "2"),
+             time_period = as.factor(time_period),
+             year_ct = year - 2013) %>% 
+      droplevels()
+    
+    # Whole time period  
+    m1 <- sdmTMB(
+      data = dd,
+      formula = density ~ year_ct + depth_sc,
+      mesh = west_mesh,
+      family = tweedie(),
+      spatial = "on",
+      spatiotemporal = "off"
+      )
+    
+    # Interaction
+    m2 <- sdmTMB(
+      data = dd,
+      formula = density ~ year_ct*time_period + depth_sc,
+      mesh = west_mesh,
+      family = tweedie(),
+      spatial = "on",
+      spatiotemporal = "off"
+      )
+    
+    sanity(m1)
+    sanity(m2)
+    
+    tidy(m1)
+    tidy(m2)
+    
+    temp_m1 <- tidy(m1, conf.int = TRUE) 
+    temp_m2 <- tidy(m2, conf.int = TRUE) 
+    
+    nd <- data.frame(year = 2013:2021) %>%
+      mutate(depth_sc = mean(dd$depth_sc),
+             year_ct = year - 2013,
+             time_period = ifelse(year < 2016, "1", "2"),
+             time_period = as.factor(time_period))
+
+    m1_preds <- predict(m1, newdata = nd, re_form = NA, re_form_iid = NA)
+    m2_preds <- predict(m2, newdata = nd, re_form = NA, re_form_iid = NA)
+    
+    nd$pred_m1 <- m1_preds$est
+    nd$pred_m2 <- m2_preds$est
+    
+    nd2 <- nd %>% pivot_longer(c(pred_m1, pred_m2))
+    
+    # Add sig or not
+    nd2 <- nd2 %>% 
+      mutate(sig_slope = "No",
+             sig_slope = ifelse(name == "pred_m1" & temp_m1$conf.low[2] > 0 & temp_m1$conf.high[2] > 0, "Yes", sig_slope),
+             sig_slope = ifelse(name == "pred_m1" & temp_m1$conf.low[2] < 0 & temp_m1$conf.high[2] < 0, "Yes", sig_slope)) %>% 
+      
+      mutate(sig_slope = ifelse(name == "pred_m2" & year < 2016 & temp_m2$conf.low[2] > 0 & temp_m2$conf.high[2] > 0, "Yes", sig_slope),
+             sig_slope = ifelse(name == "pred_m2" & year < 2016 & temp_m2$conf.low[2] < 0 & temp_m2$conf.high[2] < 0, "Yes", sig_slope),
+             
+             sig_slope = ifelse(name == "pred_m2" & year > 2015 & temp_m2$conf.low[2] + temp_m2$conf.low[5] > 0 &
+                                  temp_m2$conf.high[2] + temp_m2$conf.low[5] > 0, "Yes", sig_slope),
+             sig_slope = ifelse(name == "pred_m2" & year > 2015 & temp_m2$conf.low[2] + temp_m2$conf.low[5] < 0 &
+                                  temp_m2$conf.high[2] + temp_m2$conf.low[5] < 0, "Yes", sig_slope))
+    
+    
+    nd2 <- nd2 %>% mutate(model = paste("west", i, sep = "_"))
+    
+    data_list_pred[[i]] <- nd2
+    
+    # Significant interaction?
+    int <- filter(temp_m2, term == "year_ct:time_period2")
+    inter <- data.frame(model = paste("west", i, sep = "_")) %>%
+      mutate(sig = "No",
+             sig = ifelse(int$conf.low > 0 & int$conf.high > 0, "Yes", sig),
+             sig = ifelse(int$conf.low < 0 & int$conf.high < 0, "Yes", sig))
+
+    data_list_coef[[i]] <- inter
+    
+    # Plot residuals
+    # mcmc_res <- residuals(m, type = "mle-mcmc", mcmc_iter = 201, mcmc_warmup = 200)
+    # qqnorm(mcmc_res, asp = 1, main = paste("Normal Q-Q Plot", i, sep = " "))
+    # qqline(mcmc_res)
+    
+}
+
+# Save predictions
+dat_pred <- dplyr::bind_rows(data_list_pred)
+dat_coef <- dplyr::bind_rows(data_list_coef)
+
+write_csv(dat_pred, "output/yr_cont_west_dat_pred.csv")
+write_csv(dat_coef, "output/yr_cont_inter_west_dat_pred.csv")
 ```

@@ -84,7 +84,8 @@ d <- d %>%
   drop_na(X, Y)
 
 # Create haul_id (we want to aggregate data per haul)
-d$haul_id <- paste(d$Year, d$Quarter, d$StNo, d$HaulNo, round(d$lat, digits = 1), round(d$lon, digits = 1), sep = "_")
+#d$haul_id <- paste(d$Year, d$Quarter, d$StNo, d$HaulNo, round(d$lat, digits = 1), round(d$lon, digits = 1), sep = "_")
+d$haul_id <- paste(d$area, d$Year, d$Quarter, d$StNo, d$HaulNo, sep = "_")
 ```
 
 ## Aggregate data (biomass density)
@@ -96,7 +97,17 @@ d_litter <- d %>%
   group_by(haul_id, gruppnamn_ny) %>% 
   summarise(weight_litter_per_km2_kg_tot = sum(weight_litter_per_km2_kg))
 
-head(d_litter)
+# test
+# d_litter %>% 
+#   separate(haul_id, sep = "_", into = c("area", "year", "quarter", "stno", "haulno")) %>% 
+#   mutate()
+#   group_by(area, ) %>% 
+#   summarise(n = n())
+# 
+# length(unique(d_litter$haul_id))
+# length(unique(d$haul_id))
+# 
+# head(d_litter)
 
 # Do the same for fishery-related plastics
 d_sup <- d %>% 
@@ -111,6 +122,7 @@ d_litter2 <- d_litter %>%
   pivot_wider(names_from = gruppnamn_ny,
               values_from = weight_litter_per_km2_kg_tot,
               values_fill = 0)
+
 d_sup2 <- d_sup %>%
   pivot_wider(names_from = sup_fishery_other,
               values_from = weight_litter_per_km2_kg_tot,
@@ -204,7 +216,6 @@ litter_no <- left_join(litter_no, d_sup2_no) %>%
   ungroup()
 
 filter(litter_no, haul_id == "2015_1_57_16_57.9_11") %>% as.data.frame()
-
 ```
 
 ```{r merge data}
@@ -241,6 +252,8 @@ plot_map +
 ## Plot all data
 
 ```{r plot all data}
+unique(d$gruppnamn_ny)
+
 # Plotting litter data
 # Plot
 plot_map + 
@@ -249,11 +262,11 @@ plot_map +
   geom_sf(size = 0.1) + 
   facet_wrap(~year, ncol = 3)
 
-ggsave("figures/supp/area_map.png", dpi = 300)
+#ggsave("figures/supp/area_map.png", dpi = 300)
 
 # Trim data and make response variables
 dat <- dat %>% 
-  mutate(tot = diverse + naturmaterial + metall + glas + gummi) %>% 
+  mutate(tot = glas + diverse + plast + metall + naturmaterial + gummi) %>% 
   dplyr::select(-diverse, -naturmaterial, -metall, -glas, -gummi)
 
 glimpse(dat)
@@ -287,6 +300,7 @@ plot_map_west +
   geom_point(data = litterw, aes(X*1000, Y*1000, color = trend_area)) +
   geom_sf(size = 0.1) +  
   facet_wrap(~year, ncol = 3) +
+  labs(color = "Område") +
   theme(axis.text.x = element_text(angle = 90))
 
 ggsave("figures/supp/w_coast_map.png", dpi = 300)
@@ -318,6 +332,7 @@ plot_map_east +
   geom_point(data = littere, aes(X*1000, Y*1000, color = trend_area)) +
   geom_sf(size = 0.1) +  
   facet_wrap(~year, ncol = 3) +
+  labs(color = "Område") +
   theme(axis.text.x = element_text(angle = 90))
 
 ggsave("figures/supp/e_coast_map.png", dpi = 300)
