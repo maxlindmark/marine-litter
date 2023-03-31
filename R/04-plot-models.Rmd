@@ -364,10 +364,10 @@ diff_sum %>%
 year_diff <- left_join(year_diff, diff_sum)
 
 # Trim outliers...
-year_diff <- year_diff %>%
-  group_by(Category, Unit) %>%
-  filter(value < quantile(value, probs = 0.995),
-         value > quantile(value, probs = 0.005))
+# year_diff <- year_diff %>%
+#   group_by(Category, Unit) %>%
+#   filter(value < quantile(value, probs = 0.995),
+#          value > quantile(value, probs = 0.005))
 
 # p2 <- ggplot(data = filter(year_diff2, !name %in% c("2021-2013", "2021-2016", "2016-2013")), aes(name, value)) +
 #   geom_violin(alpha = 0.5, fill = "grey40", color = NA) +
@@ -497,10 +497,10 @@ diff_sum %>%
 year_diff <- left_join(year_diff, diff_sum)
 
 # Trim outliers...
-year_diff <- year_diff %>%
-  group_by(Category, Unit) %>%
-  filter(value < quantile(value, probs = 0.995),
-         value > quantile(value, probs = 0.005))
+# year_diff <- year_diff %>%
+#   group_by(Category, Unit) %>%
+#   filter(value < quantile(value, probs = 0.995),
+#          value > quantile(value, probs = 0.005))
 
 # Plot differences now
 year_diff2 <- year_diff %>% 

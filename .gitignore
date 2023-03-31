@@ -49,6 +49,9 @@ data/assessment_areas_marine_waters
 data/Mean depth natural colour (with land).nc
 
 # Reports
-Helcom Litter on the seafloor assessment.pdf
+/text/
+
+# large files
+/output/
 
 
