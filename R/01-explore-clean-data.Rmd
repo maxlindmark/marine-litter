@@ -31,12 +31,14 @@ library(sp)
 library(viridis)
 library(raster)
 library(devtools)
+library(sdmTMB)
 
 # Source code for map plots
 source_url("https://raw.githubusercontent.com/maxlindmark/marine-litter/main/R/functions/map-plot.R")
 
+# Using add_utm() instead...
 # Source utm function
-source_url("https://raw.githubusercontent.com/maxlindmark/marine-litter/main/R/functions/lon-lat-utm.R")
+# source_url("https://raw.githubusercontent.com/maxlindmark/marine-litter/main/R/functions/lon-lat-utm.R")
 
 # Continuous colors
 options(ggplot2.continuous.colour = "viridis")
@@ -54,34 +56,51 @@ scale_fill_discrete <- function(...) {
 ## Read and clean data
 
 ```{r}
-w <- readr::read_csv("https://raw.githubusercontent.com/maxlindmark/marine-litter/main/data/ibts_agg_2013_2022_no_size_rev1.csv")
+# w <- readr::read_csv("https://raw.githubusercontent.com/maxlindmark/marine-litter/main/data/ibts_agg_2013_2022_no_size_rev1.csv")
+# b <- readr::read_csv("https://raw.githubusercontent.com/maxlindmark/marine-litter/main/data/bits_agg_2013_2022_no_size.csv")
+# 
+# w2 <- readr::read_csv("https://raw.githubusercontent.com/maxlindmark/marine-litter/main/data/ibts_agg_2013_2024_no_size_rev1.csv")
+# b2 <- readr::read_csv("https://raw.githubusercontent.com/maxlindmark/marine-litter/main/data/bits_agg_2013_2024_no_size.csv")
+# 
+# w2w <- w2 |> filter(Year %in% unique(w$Year))
+# b2b <- b2 |> filter(Year %in% unique(w$Year))
+# 
+# nrow(w2w); nrow(w)
+# 
+# nrow(b2b); nrow(b)
 
-b <- readr::read_csv("https://raw.githubusercontent.com/maxlindmark/marine-litter/main/data/bits_agg_2013_2022_no_size.csv")
-  
+# max(
+#   abs(
+#     w$weight_litter_per_km2_kg - filter(w2, Year %in% unique(w$Year))$weight_litter_per_km2_kg)
+#   )
+# 
+# max(
+#   abs(
+#     b$weight_litter_per_km2_kg - filter(b2, Year %in% unique(w$Year))$weight_litter_per_km2_kg)
+#   )
+
+# Above I'm checking for differences. Looks close enough... 2 less rows in the newer baltic data
+
+w <- readr::read_csv("https://raw.githubusercontent.com/maxlindmark/marine-litter/main/data/ibts_agg_2013_2024_no_size_rev1.csv")
+b <- readr::read_csv("https://raw.githubusercontent.com/maxlindmark/marine-litter/main/data/bits_agg_2013_2024_no_size.csv")
+
 glimpse(w)
 glimpse(b)  
 
 # Merge data
-d <- bind_rows(w %>% mutate(area = "west"),
-               b %>% mutate(area = "baltic")) %>% 
+d <- bind_rows(w |> mutate(area = "west"),
+               b |> mutate(area = "baltic")) |> 
   ungroup()
 
 unique(d$gruppnamn_ny)
 unique(d$sup_fishery_other)
 
 # Create midpoint lat and lon
-d <- d %>% mutate(lat = (lat_start_dec + lat_stop_dec) / 2,
+d <- d |> mutate(lat = (lat_start_dec + lat_stop_dec) / 2,
                   lon = (long_start_dec + long_stop_dec) / 2)
 
-glimpse(d)
-
-# Convert to UTM coords
-d$X <- LongLatToUTM(d$lon, d$lat, zone = 33)$X / 1000 # km for computational reasons
-d$Y <- LongLatToUTM(d$lon, d$lat, zone = 33)$Y / 1000 # km for computational reasons
-
-d <- d %>%
-  filter(lat > 54 & lon > 2 & lon < 21 & lat < 59) %>%
-  drop_na(X, Y)
+d <- d |>
+  filter(lat > 54 & lon > 2 & lon < 21 & lat < 59)
 
 # Create haul_id (we want to aggregate data per haul)
 #d$haul_id <- paste(d$Year, d$Quarter, d$StNo, d$HaulNo, round(d$lat, digits = 1), round(d$lon, digits = 1), sep = "_")
@@ -92,16 +111,16 @@ d$haul_id <- paste(d$area, d$Year, d$Quarter, d$StNo, d$HaulNo, sep = "_")
 
 ```{r}
 # We want to fit models by "gruppnamn". We want to re-arrange the data so that the levels in gruppnamn are columns. First we also need to sum the weights/abundances across all "kategori" within a gruppnamn, because there are multiple
-
-d_litter <- d %>% 
-  group_by(haul_id, gruppnamn_ny) %>% 
+ 
+d_litter <- d |> 
+  group_by(haul_id, gruppnamn_ny) |> 
   summarise(weight_litter_per_km2_kg_tot = sum(weight_litter_per_km2_kg))
 
 # test
-# d_litter %>% 
-#   separate(haul_id, sep = "_", into = c("area", "year", "quarter", "stno", "haulno")) %>% 
+# d_litter |> 
+#   separate(haul_id, sep = "_", into = c("area", "year", "quarter", "stno", "haulno")) |> 
 #   mutate()
-#   group_by(area, ) %>% 
+#   group_by(area, ) |> 
 #   summarise(n = n())
 # 
 # length(unique(d_litter$haul_id))
@@ -110,20 +129,20 @@ d_litter <- d %>%
 # head(d_litter)
 
 # Do the same for fishery-related plastics
-d_sup <- d %>% 
-  group_by(haul_id, sup_fishery_other) %>% 
+d_sup <- d |> 
+  group_by(haul_id, sup_fishery_other) |> 
   summarise(weight_litter_per_km2_kg_tot = sum(weight_litter_per_km2_kg))
 
 head(d_litter)
 head(d_sup)
 
 # Now I want to pivot wider so that each level gruppnamn_ny is a column. 
-d_litter2 <- d_litter %>%
+d_litter2 <- d_litter |>
   pivot_wider(names_from = gruppnamn_ny,
               values_from = weight_litter_per_km2_kg_tot,
               values_fill = 0)
 
-d_sup2 <- d_sup %>%
+d_sup2 <- d_sup |>
   pivot_wider(names_from = sup_fishery_other,
               values_from = weight_litter_per_km2_kg_tot,
               values_fill = 0)
@@ -135,25 +154,24 @@ d_sup2
 # haul_ids <- unique(d$haul_id)
 # test_id <- haul_ids[75]
 # 
-# d %>% filter(haul_id == test_id) %>% as.data.frame()
-# d_litter %>% filter(haul_id == test_id)
-# d_litter2 %>% filter(haul_id == test_id)
+# d |> filter(haul_id == test_id) |> as.data.frame()
+# d_litter |> filter(haul_id == test_id)
+# d_litter2 |> filter(haul_id == test_id)
 
 # We can now drop "inget" column
-d_litter2 <- d_litter2 %>% dplyr::select(-Inget)
+d_litter2 <- d_litter2 |> dplyr::select(-Inget)
 
-d_sup2 <- d_sup2 %>% dplyr::select(SUP, FISHERY, haul_id)
+d_sup2 <- d_sup2 |> dplyr::select(SUP, FISHERY, haul_id)
 
 # Now we have the sum of all weights/abundances for each gruppnamn. Select key columns from the full data set and left_join
-d_sel <- d %>%
-  dplyr::select(Quarter, StNo, HaulNo, Year, lat, lon, X, Y, ANSSE_area, BALSE_area, trend_area, haul_id, swept_area_km2) %>% distinct(haul_id, .keep_all = TRUE)
+d_sel <- d |>
+  dplyr::select(Quarter, StNo, HaulNo, Year, lat, lon, ANSSE_area, BALSE_area, haul_id, swept_area_km2) |> distinct(haul_id, .keep_all = TRUE)
   
 litter <- left_join(d_litter2, d_sel)
 
 # Add in the sups into the litter data frame to have it all in one place
-litter <- left_join(litter, d_sup2) %>% 
-  janitor::clean_names() %>% 
-  rename(X = x, Y = y) %>% 
+litter <- left_join(litter, d_sup2) |> 
+  janitor::clean_names() |> 
   ungroup()
 ```
 
@@ -162,27 +180,27 @@ litter <- left_join(litter, d_sup2) %>%
 ```{r}
 # We want to fit models by "gruppnamn". We want to re-arrange the data so that the levels in gruppnamn are columns. First we also need to sum the weights/abundances across all "kategori" within a gruppnamn, because there are multiple
 
-d_litter_no <- d %>% 
-  group_by(haul_id, gruppnamn_ny) %>% 
+d_litter_no <- d |> 
+  group_by(haul_id, gruppnamn_ny) |> 
   summarise(no_litter_per_km2_tot = sum(no_litter_per_km2))
 
 head(d_litter_no)
 
 # Do the same for fishery-related plastics
-d_sup_no <- d %>% 
-  group_by(haul_id, sup_fishery_other) %>% 
+d_sup_no <- d |> 
+  group_by(haul_id, sup_fishery_other) |> 
   summarise(no_litter_per_km2_tot = sum(no_litter_per_km2))
 
 head(d_litter_no)
 head(d_sup_no)
 
 # Now I want to pivot wider so that each level gruppnamn_ny is a column. 
-d_litter2_no <- d_litter_no %>%
+d_litter2_no <- d_litter_no |>
   pivot_wider(names_from = gruppnamn_ny,
               values_from = no_litter_per_km2_tot,
               values_fill = 0)
 
-d_sup2_no <- d_sup_no %>%
+d_sup2_no <- d_sup_no |>
   pivot_wider(names_from = sup_fishery_other,
               values_from = no_litter_per_km2_tot,
               values_fill = 0)
@@ -194,35 +212,34 @@ d_sup2_no
 # haul_ids <- unique(d$haul_id)
 # test_id <- haul_ids[75]
  
-# d %>% filter(haul_id == test_id) %>% as.data.frame()
-# d_litter %>% filter(haul_id == test_id)
-# d_litter2 %>% filter(haul_id == test_id)
+# d |> filter(haul_id == test_id) |> as.data.frame()
+# d_litter |> filter(haul_id == test_id)
+# d_litter2 |> filter(haul_id == test_id)
 
 # We can now drop "inget" column
-d_litter2_no <- d_litter2_no %>% dplyr::select(-Inget)
+d_litter2_no <- d_litter2_no |> dplyr::select(-Inget)
 
-d_sup2_no <- d_sup2_no %>% dplyr::select(SUP, FISHERY, haul_id)
+d_sup2_no <- d_sup2_no |> dplyr::select(SUP, FISHERY, haul_id)
 
 # Now we have the sum of all weights/abundances for each gruppnamn. Select key columns from the full data set and left_join
-d_sel_no <- d %>%
-  dplyr::select(Quarter, StNo, HaulNo, Year, lat, lon, X, Y, ANSSE_area, BALSE_area, trend_area, haul_id, swept_area_km2) %>% distinct(haul_id, .keep_all = TRUE)
+d_sel_no <- d |>
+  dplyr::select(Quarter, StNo, HaulNo, Year, lat, lon, ANSSE_area, BALSE_area, haul_id, swept_area_km2) |> distinct(haul_id, .keep_all = TRUE)
 
 litter_no <- left_join(d_litter2_no, d_sel_no)
 
 # Add in the sups into the litter data frame to have it all in one place
-litter_no <- left_join(litter_no, d_sup2_no) %>% 
-  janitor::clean_names() %>% 
-  rename(X = x, Y = y) %>% 
+litter_no <- left_join(litter_no, d_sup2_no) |> 
+  janitor::clean_names() |> 
   ungroup()
 
-filter(litter_no, haul_id == "2015_1_57_16_57.9_11") %>% as.data.frame()
+filter(litter_no, haul_id == "2015_1_57_16_57.9_11") |> as.data.frame()
 ```
 
 ```{r merge data}
-dat <- bind_rows(litter %>% mutate(var = "biomass_density"),
-                 litter_no %>% mutate(var = "numbers_density"))
+dat <- bind_rows(litter |> mutate(var = "biomass_density"),
+                 litter_no |> mutate(var = "numbers_density"))
 
-dat <- dat %>% filter(year < 2022)
+dat <- dat |> filter(year < 2022)
 ```
 
 ## Add depth
@@ -234,19 +251,20 @@ crs(dep_raster, proj = TRUE)
 
 plot(dep_raster)
 
-dat$depth <- terra::extract(dep_raster, dat %>% dplyr::select(lon, lat))$elevation
+dat$depth <- terra::extract(dep_raster, dat |> dplyr::select(lon, lat))$elevation
 
 ggplot(dat, aes(lon, lat, color = depth*-1)) + 
   geom_point()
 
 dat$depth <- dat$depth*-1
 
-dat <- dat %>% drop_na(depth)
+dat <- dat |> drop_na(depth)
 
-plot_map + 
+ggplot() + 
   theme_plot(base_size = 14) +
-  geom_point(data = dat, aes(X*1000, Y*1000, color = depth)) +
-  geom_sf(size = 0.1)
+  geom_point(data = dat, aes(lon, lat, color = depth)) +
+  geom_sf(size = 0.1) +
+  coord_sf()
 ```
 
 ## Plot all data
@@ -256,29 +274,29 @@ unique(d$gruppnamn_ny)
 
 # Plotting litter data
 # Plot
-plot_map + 
+ggplot() + 
   theme_plot(base_size = 14) +
-  geom_point(data = dat, aes(X*1000, Y*1000, color = trend_area)) +
+  geom_point(data = dat, aes(lon, lat)) +
   geom_sf(size = 0.1) + 
   facet_wrap(~year, ncol = 3)
 
 #ggsave("figures/supp/area_map.png", dpi = 300)
 
 # Trim data and make response variables
-dat <- dat %>% 
-  mutate(tot = glas + diverse + plast + metall + naturmaterial + gummi) %>% 
+dat <- dat |> 
+  mutate(tot = glas + diverse + plast + metall + naturmaterial + gummi) |> 
   dplyr::select(-diverse, -naturmaterial, -metall, -glas, -gummi)
 
 glimpse(dat)
 
 # Make wide (again)
-d_abu <- dat %>%
-  filter(var == "numbers_density") %>% 
-  dplyr::select(haul_id, plast, sup, fishery, tot) %>% 
+d_abu <- dat |>
+  filter(var == "numbers_density") |> 
+  dplyr::select(haul_id, plast, sup, fishery, tot) |> 
   rename(plast_a = plast, sup_a = sup, fishery_a = fishery, tot_a = tot)
 
-d_bio <- dat %>%
-  filter(var == "biomass_density") %>% 
+d_bio <- dat |>
+  filter(var == "biomass_density") |> 
   rename(plast_b = plast, sup_b = sup, fishery_b = fishery, tot_b = tot)
 
 dat <- left_join(d_abu, d_bio, by = "haul_id")
@@ -288,16 +306,17 @@ dat <- left_join(d_abu, d_bio, by = "haul_id")
 
 ```{r}
 # For the west coast, our main area is in red (ANS-SE-SR-Nordsjon)... but some purple areas are really close and I think we should use them too. I suggest we filter data like this:
-litterw <- dat %>%
+litterw <- dat |>
   mutate(keep = ifelse(lon > 10.18, "Y", "N"),
-         keep = ifelse(lat < 56.5 & lon < 11.5, "N", keep)) %>% 
-  filter(keep == "Y") %>% 
-  filter(lon < 13) %>% 
-  dplyr::select(-keep)
+         keep = ifelse(lat < 56.5 & lon < 11.5, "N", keep)) |> 
+  filter(keep == "Y") |> 
+  filter(lon < 13) |> 
+  dplyr::select(-keep) |> 
+  add_utm_columns(ll_names = c("lon", "lat"))
 
 plot_map_west + 
   theme_plot(base_size = 14) +
-  geom_point(data = litterw, aes(X*1000, Y*1000, color = trend_area)) +
+  geom_point(data = litterw, aes(X*1000, Y*1000)) +
   geom_sf(size = 0.1) +  
   facet_wrap(~year, ncol = 3) +
   labs(color = "Område") +
@@ -306,12 +325,12 @@ plot_map_west +
 ggsave("figures/supp/w_coast_map.png", dpi = 300)
 
 # Plot proportion zero by litter category and year
-litterw %>% 
+litterw |> 
   mutate(plast_pa = ifelse(plast_a == 0, "0", "1"),
          sup_pa = ifelse(sup_a == 0, "0", "1"),
          fishery_pa = ifelse(fishery_a == 0, "0", "1"),
-         tot_pa = ifelse(tot_a == 0, "0", "1")) %>% 
-  pivot_longer(c(plast_pa, sup_pa, fishery_pa, tot_pa)) %>% 
+         tot_pa = ifelse(tot_a == 0, "0", "1")) |> 
+  pivot_longer(c(plast_pa, sup_pa, fishery_pa, tot_pa)) |> 
   ggplot(aes(x = year, fill = value)) + 
   geom_bar() + 
   facet_wrap(~ name, ncol = 4) + 
@@ -322,14 +341,15 @@ litterw %>%
 ## Baltic sea data
 
 ```{r}
-littere <- dat %>%
-  mutate(keep = ifelse(lon > 14, "Y", "N")) %>% 
-  filter(keep == "Y") %>% 
-  dplyr::select(-keep)
+littere <- dat |>
+  mutate(keep = ifelse(lon > 14, "Y", "N")) |> 
+  filter(keep == "Y") |> 
+  dplyr::select(-keep) |> 
+  add_utm_columns(ll_names = c("lon", "lat"))
 
 plot_map_east + 
   theme_plot(base_size = 14) +
-  geom_point(data = littere, aes(X*1000, Y*1000, color = trend_area)) +
+  geom_point(data = littere, aes(X*1000, Y*1000)) +
   geom_sf(size = 0.1) +  
   facet_wrap(~year, ncol = 3) +
   labs(color = "Område") +
@@ -338,12 +358,12 @@ plot_map_east +
 ggsave("figures/supp/e_coast_map.png", dpi = 300)
 
 # Plot proportion zero by litter category and year
-littere %>% 
+littere |> 
   mutate(plast_pa = ifelse(plast_a == 0, "0", "1"),
          sup_pa = ifelse(sup_a == 0, "0", "1"),
          fishery_pa = ifelse(fishery_a == 0, "0", "1"),
-         tot_pa = ifelse(tot_a == 0, "0", "1")) %>% 
-  pivot_longer(c(plast_pa, sup_pa, fishery_pa, tot_pa)) %>% 
+         tot_pa = ifelse(tot_a == 0, "0", "1")) |> 
+  pivot_longer(c(plast_pa, sup_pa, fishery_pa, tot_pa)) |> 
   ggplot(aes(x = year, fill = value)) + 
   geom_bar() + 
   facet_wrap(~ name, ncol = 4) + 
