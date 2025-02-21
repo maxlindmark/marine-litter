@@ -21,10 +21,16 @@ ggplot(swe_coast) +
   geom_sf()
 
 # Transform our map into UTM 33 coordinates, which is the equal-area projection we fit in:
-utm_zone33 <- 32633
-swe_coast_proj <- sf::st_transform(swe_coast, crs = utm_zone33)
+utm_zone33 <- 32633 # East coast
+utm_zone32 <- 32632 # West coast
 
-ggplot(swe_coast_proj) + 
+east_swe_coast_proj <- sf::st_transform(swe_coast, crs = utm_zone33)
+west_swe_coast_proj <- sf::st_transform(swe_coast, crs = utm_zone32)
+
+ggplot(east_swe_coast_proj) + 
+  geom_sf()
+
+ggplot(west_swe_coast_proj) + 
   geom_sf()
 
 # Define plotting theme for main plot
@@ -61,27 +67,27 @@ theme_facet_map <- function(base_size = 10, base_family = "") {
 
 # Make default base map plot
 #sf::st_boundary(swe_coast_proj)
+ 
+# xmin2 <- -61896.44*1.005
+# xmax2 <- 893074.5*0.91
+# ymin2 <- 5983578*1.025
+# ymax2 <- 6691902*0.99
 
-xmin2 <- -61896.44*1.005
-xmax2 <- 893074.5*0.91
-ymin2 <- 5983578*1.025
-ymax2 <- 6691902*0.99
-
-plot_map <-
-  ggplot(swe_coast_proj) +
-  xlim(xmin2, xmax2) +
-  ylim(ymin2, ymax2) +
-  labs(x = "Longitude", y = "Latitude") +
-  geom_sf(size = 0.3) +
-  theme(axis.text.x = element_text(angle = 90)) +
-  theme_plot() +
-  #guides(fill = guide_legend(title.position = "top", title.hjust = 0.5)) +
-  NULL
+# plot_map <-
+#   ggplot(swe_coast_proj) +
+#   xlim(xmin2, xmax2) +
+#   ylim(ymin2, ymax2) +
+#   labs(x = "Longitude", y = "Latitude") +
+#   geom_sf(size = 0.3) +
+#   theme(axis.text.x = element_text(angle = 90)) +
+#   theme_plot() +
+#   #guides(fill = guide_legend(title.position = "top", title.hjust = 0.5)) +
+#   NULL
 
 plot_map_west <-
-  ggplot(swe_coast_proj) +
-  xlim(200000, xmax2*0.45) +
-  ylim(ymin2*1.015, ymax2*0.99) +
+  ggplot(west_swe_coast_proj) +
+  xlim(550000, 730000) +
+  ylim(6225165, 6558733) +
   labs(x = "Longitude", y = "Latitude") +
   geom_sf(size = 0.3) +
   theme_plot() +
@@ -90,9 +96,9 @@ plot_map_west <-
   NULL
 
 plot_map_east <-
-  ggplot(swe_coast_proj) +
-  xlim(400000, xmax2*1.03) +
-  ylim(ymin2*0.995, ymax2*0.98) +
+  ggplot(east_swe_coast_proj) +
+  xlim(400000, 837079) +
+  ylim(6102502, 6492483) +
   labs(x = "Longitude", y = "Latitude") +
   geom_sf(size = 0.3) +
   theme_plot() +
