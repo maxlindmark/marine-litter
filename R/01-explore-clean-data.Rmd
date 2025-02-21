@@ -239,7 +239,7 @@ filter(litter_no, haul_id == "2015_1_57_16_57.9_11") |> as.data.frame()
 dat <- bind_rows(litter |> mutate(var = "biomass_density"),
                  litter_no |> mutate(var = "numbers_density"))
 
-dat <- dat |> filter(year < 2022)
+#dat <- dat |> filter(year < 2022)
 ```
 
 ## Add depth
