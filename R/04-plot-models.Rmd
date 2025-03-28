@@ -46,52 +46,46 @@ source("/Users/maxlindmark/Dropbox/Max work/R/marine-litter/R/functions/map-plot
 
 ```{r}
 # Read and make data long so that I can for loop through all categories
-west <- readr::read_csv("https://raw.githubusercontent.com/maxlindmark/marine-litter/main/data/west_coast_litter.csv") %>%
+west <- readr::read_csv("https://raw.githubusercontent.com/maxlindmark/marine-litter/main/data/west_coast_litter.csv") |>
   mutate(year_f = as.factor(year),
          quarter_f = as.factor(quarter),
-         depth_sc = (depth - mean(depth)) / sd(depth)) %>%
+         depth_sc = (depth - mean(depth)) / sd(depth)) |>
   pivot_longer(c("fishery_a", "fishery_b", "plast_a", "plast_b", "sup_a", "sup_b", "tot_a", "tot_b"),
                names_to = "litter_category", values_to = "density")
 
-east <- readr::read_csv("https://raw.githubusercontent.com/maxlindmark/marine-litter/main/data/east_coast_litter.csv") %>%
+east <- readr::read_csv("https://raw.githubusercontent.com/maxlindmark/marine-litter/main/data/east_coast_litter.csv") |>
   mutate(year_f = as.factor(year),
          quarter_f = as.factor(quarter),
-         depth_sc = (depth - mean(depth)) / sd(depth)) %>%
+         depth_sc = (depth - mean(depth)) / sd(depth)) |>
   pivot_longer(c("fishery_a", "fishery_b", "plast_a", "plast_b", "sup_a", "sup_b", "tot_a", "tot_b"),
                names_to = "litter_category", values_to = "density")
 
 # Read prediction grid so that we can scale with data to go from total biomass to biomass density
-pred_grid_west <- read_csv("data/pred_grid_west.csv") %>% 
+pred_grid_west <- read_csv("data/pred_grid_west.csv") |> 
   mutate(year_f = as.factor(year),
          quarter_f = as.factor(1),
-         depth_sc = (depth - mean(west$depth)) / sd(west$depth)) %>% 
-  mutate(X = X*1000,
-         Y = Y*1000) %>% 
+         depth_sc = (depth - mean(west$depth)) / sd(west$depth)) |> 
+  mutate(X = X,
+         Y = Y) |> 
   drop_na(area)
 
-pred_grid_east <- read_csv("data/pred_grid_east.csv") %>% 
+pred_grid_east <- read_csv("data/pred_grid_east.csv") |> 
   mutate(year_f = as.factor(year),
          quarter_f = as.factor(1),
-         depth_sc = (depth - mean(west$depth)) / sd(west$depth)) %>% 
-  mutate(X = X*1000,
-         Y = Y*1000)
+         depth_sc = (depth - mean(west$depth)) / sd(west$depth)) |> 
+  mutate(X = X,
+         Y = Y)
 
-ncells_west <- filter(pred_grid_west, year == max(pred_grid_west$year)) %>% nrow()
-ncells_east <- filter(pred_grid_east, year == max(pred_grid_east$year)) %>% nrow()
+ncells_west <- filter(pred_grid_west, year == max(pred_grid_west$year)) |> nrow()
+ncells_east <- filter(pred_grid_east, year == max(pred_grid_east$year)) |> nrow()
 ```
 
 Read csv files with predictions, sims and coefficients
 
 ```{r}
 # West
-pred_west <- read_csv("output/west_dat_pred.csv") %>% 
-  separate(model, sep = "_", into = c("Category", "Unit")) %>% 
-  mutate(Category = str_to_title(Category),
-         Unit = str_to_title(Unit),
-         time_period = ifelse(year < 2016, "2013-2015", "2016-2021"))
-
-sim_west <- read_csv("output/west_dat_sim.csv") %>% 
-  separate(model, sep = "_", into = c("Area", "Category", "Unit")) %>% 
+sim_west <- read_csv("output/west_dat_sim.csv") |> 
+  separate(model, sep = "_", into = c("Area", "Category", "Unit")) |> 
   mutate(Category = str_to_title(Category),
          Unit = str_to_title(Unit),
          Area = str_to_title(Area),
@@ -102,44 +96,10 @@ sim_west <- read_csv("output/west_dat_sim.csv") %>%
          Unit = ifelse(Unit == "A", "Antal", "Vikt"),
          time_period = ifelse(year < 2016, "2013-2015", "2016-2021"))
 
-sims_west <- read_csv("output/west_dat_sims.csv") %>% 
-  separate(model, sep = "_", into = c("Area", "Category", "Unit")) %>% 
-  mutate(Category = str_to_title(Category),
-         Unit = str_to_title(Unit),
-         Area = str_to_title(Area),
-         .value = .value/(ncells_west * 2*2),
-         Category = ifelse(Category == "Fishery", "Fiske", Category),
-         Unit = ifelse(Unit == "A", "Antal", "Vikt"),
-         time_period = ifelse(year < 2016, "2013-2015", "2016-2021"))
-
-coef_west <- read_csv("output/west_dat_coef.csv") %>% 
-  separate(model, sep = "_", into = c("Area", "Category", "Unit")) %>% 
-  mutate(Category = str_to_title(Category),
-         Unit = str_to_title(Unit),
-         Area = str_to_title(Area))
-
-# From the model with year as continuous
-cont_west <- read_csv("output/yr_cont_west_dat_pred.csv") %>% 
-  separate(model, sep = "_", into = c("Area", "Category", "Unit")) %>% 
-  mutate(Category = str_to_title(Category),
-         Unit = str_to_title(Unit),
-         Area = str_to_title(Area),
-         value = exp(value),
-         time_period = ifelse(year < 2016, "2013-2015", "2016-2021"),
-         Unit = ifelse(Unit == "A", "Antal", "Vikt"),
-         Category = ifelse(Category == "Fishery", "Fiske", Category),
-         name2 = ifelse(name == "pred_m1", "2013-2021", "2013-2021 med interaktion"),
-         sig_slope = ifelse(sig_slope == "No", "Nej", "Ja")) %>% 
-  rename(Signifikant = sig_slope)
 
 # East
-pred_east <- read_csv("output/east_dat_pred.csv") %>% 
-  separate(model, sep = "_", into = c("Category", "Unit")) %>% 
-  mutate(Unit = str_to_title(Unit),
-         time_period = ifelse(year < 2016, "2013-2015", "2016-2021"))
-
-sim_east <- read_csv("output/east_dat_sim.csv") %>% 
-  separate(model, sep = "_", into = c("Area", "Category", "Unit")) %>% 
+sim_east <- read_csv("output/east_dat_sim.csv") |> 
+  separate(model, sep = "_", into = c("Area", "Category", "Unit")) |> 
   mutate(Category = str_to_title(Category),
          Unit = str_to_title(Unit),
          Area = str_to_title(Area),
@@ -149,62 +109,10 @@ sim_east <- read_csv("output/east_dat_sim.csv") %>%
          Category = ifelse(Category == "Fishery", "Fiske", Category),
          Unit = ifelse(Unit == "A", "Antal", "Vikt"),
          time_period = ifelse(year < 2016, "2013-2015", "2016-2021"))
-
-sims_east <- read_csv("output/east_dat_sims.csv") %>% 
-  separate(model, sep = "_", into = c("Area", "Category", "Unit")) %>% 
-  mutate(Category = str_to_title(Category),
-         Unit = str_to_title(Unit),
-         Area = str_to_title(Area),
-         .value = .value/(ncells_east * 2*2),
-         Category = ifelse(Category == "Fishery", "Fiske", Category),
-         Unit = ifelse(Unit == "A", "Antal", "Vikt"),
-         time_period = ifelse(year < 2016, "2013-2015", "2016-2021"))
-
-coef_east <- read_csv("output/east_dat_coef.csv") %>% 
-  separate(model, sep = "_", into = c("Area", "Category", "Unit")) %>% 
-  mutate(Category = str_to_title(Category),
-         Unit = str_to_title(Unit),
-         Area = str_to_title(Area))
-
-# From the model with year as continuous
-cont_east <- read_csv("output/yr_cont_east_dat_pred.csv") %>% 
-  separate(model, sep = "_", into = c("Area", "Category", "Unit")) %>% 
-  mutate(Category = str_to_title(Category),
-         Unit = str_to_title(Unit),
-         Area = str_to_title(Area),
-         value = exp(value),
-         time_period = ifelse(year < 2016, "2013-2015", "2016-2021"),
-         Unit = ifelse(Unit == "A", "Antal", "Vikt"),
-         Category = ifelse(Category == "Fishery", "Fiske", Category),
-         name2 = ifelse(name == "pred_m1", "2013-2021", "2013-2021 med interaktion"),
-         sig_slope = ifelse(sig_slope == "No", "Nej", "Ja")) %>% 
-  rename(Signifikant = sig_slope)
 ```
 
 ```{r}
 pal <- brewer.pal(n = 8, name = "Paired")
-```
-
-Plot depth coefficients
-
-```{r}
-# coefs <- bind_rows(coef_west, coef_east) %>%
-#   filter(term == "depth_sc") %>% 
-#   mutate(Category = str_to_title(Category),
-#          Unit = str_to_title(Unit))
-#   
-# ggplot(coefs, aes(y = estimate, x = Category, ymin = conf.low, ymax = conf.high, color = Category, shape = Unit)) + 
-#   geom_point(size = 2, position = position_dodge(width = 0.2)) +
-#   geom_errorbar(width = 0, position = position_dodge(width = 0.2)) + 
-#   geom_hline(yintercept = 0, size = 0.75, color = "gray", linetype = 2) + 
-#   #scale_color_manual(values = pal[c(3, 2, 1)]) +
-#   labs(y = "Estimate") +
-#   theme_plot() +
-#   coord_flip() +
-#   facet_wrap(~Area) +
-#   NULL
-# 
-# ggsave("figures/coefs.pdf", units = "cm", width = 10, height = 20)
 ```
 
 ## Time trends
@@ -212,344 +120,109 @@ Plot depth coefficients
 ```{r east coast plots}
 pal <- brewer.pal(n = 3, name = "Dark2")
 
-# East coast
-# Abundance
-sims_east %>% 
-  filter(Unit == "Antal") %>% 
-  ggplot() +
-  facet_wrap(~Category, ncol = 2, scales = "free") +
-  geom_ribbon(data = filter(sim_east, Unit == "Antal"), aes(year, est, ymin = lwr, ymax = upr), alpha = 0.3) +
-  geom_line(data = filter(sim_east, Unit == "Antal"), aes(year, est), size = 0.75) +
-  geom_line(data = filter(cont_east, Unit == "Antal" & name2 == "2013-2021 med interaktion"), aes(year, value, linetype = Signifikant, color = "2013-2021 med interaktion", group = time_period), size = 0.75, inherit.aes = FALSE) +
-  geom_line(data = filter(cont_east, Unit == "Antal" & name2 == "2013-2021"), aes(year, value, linetype = Signifikant, color = "2013-2021"), size = 0.75, inherit.aes = FALSE) +
-  scale_x_continuous(breaks = scales::pretty_breaks(n = 5)) + 
-  scale_color_manual(values = pal[c(2, 3)]) + 
-  theme_plot() +
-  theme(plot.margin = unit(c(0, 0.4, 0.4, 0.4), "cm"),
-        legend.direction = "vertical") +
-  labs(color = "Modell", x = 'År', y = bquote('Antal/'~km^2)) +
-  NULL
+# Fit straight lines to time trends
+mid_year <- 2018
+sims <- bind_rows(sim_east, sim_west) |> 
+  dplyr::select(-time_period) |> 
+  rename(est_y = est,
+         lwr_y = lwr,
+         upr_y = upr,
+         log_est_y = log_est, 
+         se_y = se)
 
-ggsave("figures/east_trends.pdf", units = "cm", width = 20, height = 20)
+sims <- sims |> 
+  mutate(year_ct = year - mid_year,
+         id = paste(Area, Category, Unit, sep = "_"))
 
-# Vikt
-sims_east %>% 
-  filter(Unit == "Vikt") %>% 
-  ggplot() +
-  facet_wrap(~Category, ncol = 2, scales = "free") +
-  #geom_ribbon(data = filter(sim_east, Unit == "Vikt"), aes(year, est, ymin = lwr, ymax = upr), alpha = 0.3) +
-  geom_line(data = filter(sim_east, Unit == "Vikt"), aes(year, est), size = 0.75) +
-  geom_line(data = filter(cont_east, Unit == "Vikt" & name2 == "2013-2021 med interaktion"), aes(year, value, linetype = Signifikant, color = "2013-2021 med interaktion", group = time_period), size = 0.75, inherit.aes = FALSE) +
-  geom_line(data = filter(cont_east, Unit == "Vikt" & name2 == "2013-2021"), aes(year, value, linetype = Signifikant, color = "2013-2021"), size = 0.75, inherit.aes = FALSE) +
-  scale_x_continuous(breaks = scales::pretty_breaks(n = 5)) + 
-  scale_color_manual(values = pal[c(2, 3)]) + 
-  theme_plot() +
-  theme(plot.margin = unit(c(0, 0.4, 0.4, 0.4), "cm"),
-        legend.direction = "vertical") +
-  labs(color = "Modell", x = 'År', y = bquote('Kg/'~km^2)) +
-  NULL
+nd <- tibble(year = seq(min(sim_east$year), max(sim_east$year), length.out = 30)) |> 
+  mutate(year_ct = year - mid_year)
 
-ggsave("figures/supp/biomass_east_trends.pdf", units = "cm", width = 20, height = 20)
+trends <- list()
+
+for(i in unique(sims$id)){
+  
+  dd <- filter(sims, id == i)
+  
+  m <- sdmTMB(est_y ~ year_ct,
+              #family = Gamma(link = "log"),
+              spatial = "off", 
+              data = dd)
+  
+  m2 <- sdmTMB(est_y ~ year_ct,
+               #family = Gamma(link = "log"),
+               spatial = "off", 
+               data = dd |> filter(year >= 2019))
+  
+  p <- predict(m, newdata = nd, se_fit = TRUE) |> 
+    mutate(upr = est + 1.96*est_se,
+           lwr = est - 1.96*est_se,
+           tp = "2023-2024",
+           sig = ifelse((tidy(m)$conf.low[2] > 0 & tidy(m)$conf.high[2] > 0) | (tidy(m)$conf.low[2] < 0 & tidy(m)$conf.high[2] < 0),
+                        "J", "N"))
+  
+  p2 <- predict(m2, newdata = nd |> filter(year >= 2019), se_fit = TRUE) |> 
+    mutate(upr = est + 1.96*est_se,
+           lwr = est - 1.96*est_se,
+           tp = "2019-2024",
+           sig = ifelse((tidy(m2)$conf.low[2] > 0 & tidy(m2)$conf.high[2] > 0) | (tidy(m2)$conf.low[2] < 0 & tidy(m2)$conf.high[2] < 0),
+                        "J", "N"))
+  
+  pp <- bind_rows(p, p2) |> 
+    mutate(id = i)
+    
+  trends[[i]] <- pp
+  
+}
+
+trends_df <- bind_rows(trends) |> 
+  separate(id, into = c("Area", "Category", "Unit"), remove = FALSE)
 
 
-# West coast
-# Abundance
-sims_west %>% 
-  filter(Unit == "Antal") %>% 
-  ggplot() +
-  facet_wrap(~Category, ncol = 2, scales = "free") +
-  geom_ribbon(data = filter(sim_west, Unit == "Antal"), aes(year, est, ymin = lwr, ymax = upr), alpha = 0.3) +
-  geom_line(data = filter(sim_west, Unit == "Antal"), aes(year, est), size = 0.75) +
-  geom_line(data = filter(cont_west, Unit == "Antal" & name2 == "2013-2021 med interaktion"),
-            aes(year, value, linetype = Signifikant, color = "2013-2021 med interaktion", group = time_period), size = 0.75, inherit.aes = FALSE) +
-  geom_line(data = filter(cont_west, Unit == "Antal" & name2 == "2013-2021"),
-            aes(year, value, linetype = Signifikant, color = "2013-2021"), size = 0.75, inherit.aes = FALSE) +
-  scale_x_continuous(breaks = scales::pretty_breaks(n = 5)) + 
-  scale_color_manual(values = pal[c(2, 3)]) + 
-  theme_plot() +
-  theme(plot.margin = unit(c(0, 0.4, 0.4, 0.4), "cm"),
-        legend.direction = "vertical") +
-  labs(color = "Modell", x = 'År', y = bquote('Antal/'~km^2)) +
-  NULL
+# Loop through and plot
 
-ggsave("figures/west_trends.pdf", units = "cm", width = 20, height = 20)
+sims$id <- paste(sims$Area, sims$Unit, sep = "_")
+trends_df$id <- paste(trends_df$Area, trends_df$Unit, sep = "_")
 
-# Vikt
-sims_west %>% 
-  filter(.iteration < 10) %>% 
-  filter(Unit == "Vikt") %>% 
-  ggplot() +
-  facet_wrap(~Category, ncol = 2, scales = "free") +
-  #geom_ribbon(data = filter(sim_west, Unit == "Vikt"), aes(year, est, ymin = lwr, ymax = upr), alpha = 0.3) +
-  geom_line(data = filter(sim_west, Unit == "Vikt"), aes(year, est), size = 0.75) +
-  geom_line(data = filter(cont_west, Unit == "Vikt" & name2 == "2013-2021 med interaktion"),
-            aes(year, value, linetype = Signifikant, color = "2013-2021 med interaktion", group = time_period), size = 0.75, inherit.aes = FALSE) +
-  geom_line(data = filter(cont_west, Unit == "Vikt" & name2 == "2013-2021"),
-            aes(year, value, linetype = Signifikant, color = "2013-2021"), size = 0.75, inherit.aes = FALSE) +
-  scale_x_continuous(breaks = scales::pretty_breaks(n = 5)) + 
-  scale_color_manual(values = pal[c(2, 3)]) + 
-  theme_plot() +
-  theme(plot.margin = unit(c(0, 0.4, 0.4, 0.4), "cm"),
-        legend.direction = "vertical") +
-  labs(color = "Modell", x = 'År', y = bquote('Kg/'~km^2)) +
-  NULL
+for(i in unique(sims$id)){
+  
+  dd <- sims |> filter(id == i)
+  dt <- trends_df |> filter(id == i)
+  
+  if(unique(dd$Unit) == "Antal"){
+  
+    y <- bquote('Antal/'~km^2)  
+    
+  }  else {
+    
+    y <- bquote('Kg/'~km^2)  
+    
+  }
+  
+  ggplot(data = dd, aes(year, est_y)) +
+    facet_wrap(~Category, ncol = 2, scales = "free") +
+    geom_ribbon(data = dt, aes(year, est, ymin = lwr, ymax = upr,
+                               color = tp, fill = tp, linetype = sig),
+                alpha = 0.3, color = NA) +
+    geom_line(data = dt, aes(year, est, color = tp, linetype = sig),
+              linewidth = 1) +
+    geom_errorbar(aes(ymin = lwr_y, ymax = upr_y), alpha = 0.4, width = 0) +
+    geom_point(alpha = 0.6, size = 2) +
+    scale_x_continuous(breaks = scales::pretty_breaks(n = 5)) + 
+    scale_color_manual(values = pal[c(2, 3)]) +
+    scale_fill_manual(values = pal[c(2, 3)]) + 
+    ggsidekick::theme_sleek() +
+    guides(fill = "none") +
+    theme(plot.margin = unit(c(0, 0.4, 0.4, 0.4), "cm"),
+          legend.position = "bottom") +
+    labs(y = y,
+         x = 'År',
+         color = "Tidsperiod",
+         linetype = "Signifikant") +
+    NULL
+  
+  ggsave(paste0("figures/", i, ".png"), units = "cm", width = 20, height = 20)
+  
+}
 
-ggsave("figures/supp/biomass_west_trends.pdf", units = "cm", width = 20, height = 20)
 ```
-
-## Simulate differences between 2021 and 2016
-
-```{r}
-year_diff <- sims_east %>% 
-  filter(year %in% c(2013, 2016, 2021)) %>% 
-  dplyr::select(-time_period) %>% 
-  pivot_wider(names_from = year, values_from = .value) %>% 
-  mutate("2021-2013" = `2021` - `2013`,
-         "2021-2016" = `2021` - `2016`,
-         "2016-2013" = `2016` - `2013`) %>% 
-  pivot_longer(c(`2021`, `2016`, `2013`, `2021-2013`, `2021-2016`, `2016-2013`)) %>% 
-  ungroup()
-
-diff_sum <- year_diff %>% 
-  filter(name %in% c("2021-2013", "2021-2016", "2016-2013")) %>% 
-  group_by(Category, Unit, name) %>% 
-  summarise(diff_lwr = round(quantile(value, probs = 0.025), digits = 2),
-            diff_med = round(quantile(value, probs = 0.5), digits = 2),
-            diff_upr = round(quantile(value, probs = 0.975), digits = 2)) #%>% 
-  #mutate(label = paste("2022-2013 = ", diff_med, " [", diff_lwr, ",", diff_upr, "]", sep = "")) 
-
-# Make table?
-
-# Left join so that we can color "sig"
-diff_sum <- diff_sum %>% mutate(Signifikant = ifelse(diff_lwr > 0 & diff_upr > 0, "Ja", "Nej"),
-                                Signifikant = ifelse(diff_lwr < 0 & diff_upr < 0, "Ja", Signifikant))
-
-# Make tables
-# 2016-2013
-diff_sum %>% 
-  rename(Kategori = Category,
-         Enhet = Unit) %>% 
-  filter(name == "2016-2013") %>% 
-  mutate(`Skillnad [95% konfidensintervall]` = 
-           paste(round(diff_med, digits = 0), "[", round(diff_lwr, digits = 0), ",", round(diff_upr, digits = 0), "]")) %>% 
-  dplyr::select(-name, -diff_lwr, -diff_upr, -diff_med) %>% 
-  knitr::kable(caption = "Östersjön 2016-2013") %>% 
-  kable_styling() %>%
-  save_kable(file = "east_2016_2013_table.png")
-
-# 2021-2013
-diff_sum %>% 
-  rename(Kategori = Category,
-         Enhet = Unit) %>% 
-  filter(name == "2021-2013") %>% 
-  mutate(`Skillnad [95% konfidensintervall]` = 
-           paste(round(diff_med, digits = 0), "[", round(diff_lwr, digits = 0), ",", round(diff_upr, digits = 0), "]")) %>% 
-  dplyr::select(-name, -diff_lwr, -diff_upr, -diff_med) %>% 
-  knitr::kable(caption = "Östersjön 2021-2013") %>% 
-  kable_styling() %>%
-  save_kable(file = "east_2021_2013_table.png")
-
-# 2021-2016
-diff_sum %>% 
-  rename(Kategori = Category,
-         Enhet = Unit) %>% 
-  filter(name == "2021-2016") %>% 
-  mutate(`Skillnad [95% konfidensintervall]` = 
-           paste(round(diff_med, digits = 0), "[", round(diff_lwr, digits = 0), ",", round(diff_upr, digits = 0), "]")) %>% 
-  dplyr::select(-name, -diff_lwr, -diff_upr, -diff_med) %>% 
-  knitr::kable(caption = "Östersjön 2021-2016") %>% 
-  kable_styling() %>%
-  save_kable(file = "east_2021_2016_table.png")
-
-year_diff <- left_join(year_diff, diff_sum)
-
-# Trim outliers...
-# year_diff <- year_diff %>%
-#   group_by(Category, Unit) %>%
-#   filter(value < quantile(value, probs = 0.995),
-#          value > quantile(value, probs = 0.005))
-
-# p2 <- ggplot(data = filter(year_diff2, !name %in% c("2021-2013", "2021-2016", "2016-2013")), aes(name, value)) +
-#   geom_violin(alpha = 0.5, fill = "grey40", color = NA) +
-#   #geom_jitter(height = 0, width = 0.05, alpha = 0.2, color = "grey30", size = 0.1) +
-#   geom_boxplot(fill = NA, width = 0.1, size = 0.5, color = "grey5",
-#                outlier.shape = NA) +
-#   theme_plot() +
-#   theme(plot.margin = unit(c(0, 0.4, 0, 0.4), "cm")) +
-#   #facet_wrap(~model, scales = "free", ncol = 3) +
-#   facet_wrap(Category~Unit, ncol = 2, scales = "free") +
-#   xlab('Year') +
-#   ylab('Densitet') +
-#   NULL
-# 
-# p2
-# 
-# ggsave("figures/supp/east_violins.pdf", units = "cm", width = 20, height = 20)
-
-# Plot differences now
-year_diff2 <- year_diff %>% 
-  filter(name %in% c("2021-2013", "2021-2016", "2016-2013")) %>% 
-  group_by(Area, Category, Unit, name) %>% 
-  mutate(mean_val = mean(value)) %>% 
-  ungroup() %>% 
-  mutate(col_group = "Ingen statistisk skillnad",
-         col_group = ifelse(Signifikant == "Ja" & mean_val > 0, "Ökning", col_group),
-         col_group = ifelse(Signifikant == "Ja" & mean_val < 0, "Minskning", col_group))
-
-ggplot(data = filter(year_diff2, name %in% c("2021-2013", "2021-2016", "2016-2013") & Unit == "Antal"),
-             aes(x = factor(name, level = c("2021-2013", "2016-2013", "2021-2016")),
-                 value, fill = col_group)) +
-  geom_violin(alpha = 0.4, color = NA) +
-  geom_boxplot(fill = NA, width = 0.1, size = 0.5, color = "grey5",
-               outlier.shape = NA) +
-  scale_fill_manual(values = pal[c(6, 2)], name = "") +
-  theme_plot() +
-  scale_fill_manual(values = c("grey40", "green4", "tomato2"), name = "") +
-  theme(plot.margin = unit(c(0, 0.4, 0.4, 0.4), "cm")) +
-  facet_wrap(~Category, ncol = 2, scales = "free") +
-  labs(y = bquote('Skillnad antal/'~km^2), x = "") +
-  geom_hline(yintercept = 0, linetype = 2, size = 0.4) +
-  NULL
-
-ggsave("figures/east_diff_violins.pdf", units = "cm", width = 20, height = 20)
-
-# Biomass
-ggplot(data = filter(year_diff2, name %in% c("2021-2013", "2021-2016", "2016-2013") & Unit == "Vikt"),
-             aes(x = factor(name, level = c("2021-2013", "2016-2013", "2021-2016")),
-                 value, fill = col_group)) +
-  geom_violin(alpha = 0.4, color = NA) +
-  geom_boxplot(fill = NA, width = 0.1, size = 0.5, color = "grey5",
-               outlier.shape = NA) +
-  scale_fill_manual(values = pal[c(6, 2)], name = "") +
-  theme_plot() +
-  scale_fill_manual(values = c("grey40", "green4", "tomato2"), name = "") +
-  theme(plot.margin = unit(c(0, 0.4, 0.4, 0.4), "cm")) +
-  facet_wrap(~Category, ncol = 2, scales = "free") +
-  labs(y = bquote('Skillnad kg/'~km^2), x = "") +
-  geom_hline(yintercept = 0, linetype = 2, size = 0.4) +
-  NULL
-
-ggsave("figures/supp/biomass_east_diff_violins.pdf", units = "cm", width = 20, height = 20)
-```
-
-```{r west coast plots}
-year_diff <- sims_west %>% 
-  filter(year %in% c(2013, 2016, 2021)) %>% 
-  dplyr::select(-time_period) %>% 
-  pivot_wider(names_from = year, values_from = .value) %>% 
-  mutate("2021-2013" = `2021` - `2013`,
-         "2021-2016" = `2021` - `2016`,
-         "2016-2013" = `2016` - `2013`) %>% 
-  pivot_longer(c(`2021`, `2016`, `2013`, `2021-2013`, `2021-2016`, `2016-2013`)) %>% 
-  ungroup()
-
-diff_sum <- year_diff %>% 
-  filter(name %in% c("2021-2013", "2021-2016", "2016-2013")) %>% 
-  group_by(Category, Unit, name) %>% 
-  summarise(diff_lwr = round(quantile(value, probs = 0.025), digits = 2),
-            diff_med = round(quantile(value, probs = 0.5), digits = 2),
-            diff_upr = round(quantile(value, probs = 0.975), digits = 2)) #%>% 
-  #mutate(label = paste("2022-2013 = ", diff_med, " [", diff_lwr, ",", diff_upr, "]", sep = "")) 
-
-# Make table?
-
-# Left join so that we can color "sig"
-diff_sum <- diff_sum %>% mutate(Signifikant = ifelse(diff_lwr > 0 & diff_upr > 0, "Ja", "Nej"),
-                                Signifikant = ifelse(diff_lwr < 0 & diff_upr < 0, "Ja", Signifikant))
-
-# Make tables
-# 2016-2013
-diff_sum %>% 
-  rename(Kategori = Category,
-         Enhet = Unit) %>% 
-  filter(name == "2016-2013") %>% 
-  mutate(`Skillnad [95% konfidensintervall]` = 
-           paste(round(diff_med, digits = 0), "[", round(diff_lwr, digits = 0), ",", round(diff_upr, digits = 0), "]")) %>% 
-  dplyr::select(-name, -diff_lwr, -diff_upr, -diff_med) %>% 
-  knitr::kable(caption = "Västerhavet 2016-2013") %>% 
-  kable_styling() %>%
-  save_kable(file = "west_2016_2013_table.png")
-
-# 2021-2013
-diff_sum %>% 
-  rename(Kategori = Category,
-         Enhet = Unit) %>% 
-  filter(name == "2021-2013") %>% 
-  mutate(`Skillnad [95% konfidensintervall]` = 
-           paste(round(diff_med, digits = 0), "[", round(diff_lwr, digits = 0), ",", round(diff_upr, digits = 0), "]")) %>% 
-  dplyr::select(-name, -diff_lwr, -diff_upr, -diff_med) %>% 
-  knitr::kable(caption = "Västerhavet 2021-2013") %>% 
-  kable_styling() %>%
-  save_kable(file = "west_2021_2013_table.png")
-
-# 2021-2016
-diff_sum %>% 
-  rename(Kategori = Category,
-         Enhet = Unit) %>% 
-  filter(name == "2021-2016") %>% 
-  mutate(`Skillnad [95% konfidensintervall]` = 
-           paste(round(diff_med, digits = 0), "[", round(diff_lwr, digits = 0), ",", round(diff_upr, digits = 0), "]")) %>% 
-  dplyr::select(-name, -diff_lwr, -diff_upr, -diff_med) %>% 
-  knitr::kable(caption = "Västerhavet 2021-2016") %>% 
-  kable_styling() %>%
-  save_kable(file = "west_2021_2016_table.png")
-
-year_diff <- left_join(year_diff, diff_sum)
-
-# Trim outliers...
-# year_diff <- year_diff %>%
-#   group_by(Category, Unit) %>%
-#   filter(value < quantile(value, probs = 0.995),
-#          value > quantile(value, probs = 0.005))
-
-# Plot differences now
-year_diff2 <- year_diff %>% 
-  filter(name %in% c("2021-2013", "2021-2016", "2016-2013")) %>% 
-  group_by(Area, Category, Unit, name) %>% 
-  mutate(mean_val = mean(value)) %>% 
-  ungroup() %>% 
-  mutate(col_group = "Ingen statistisk skillnad",
-         col_group = ifelse(Signifikant == "Ja" & mean_val > 0, "Ökning", col_group),
-         col_group = ifelse(Signifikant == "Ja" & mean_val < 0, "Minskning", col_group))
-
-ggplot(data = filter(year_diff2, name %in% c("2021-2013", "2021-2016", "2016-2013") & Unit == "Antal"),
-             aes(x = factor(name, level = c("2021-2013", "2016-2013", "2021-2016")),
-                 value, fill = col_group)) +
-  geom_violin(alpha = 0.4, color = NA) +
-  geom_boxplot(fill = NA, width = 0.1, size = 0.5, color = "grey5",
-               outlier.shape = NA) +
-  scale_fill_manual(values = pal[c(6, 2)], name = "") +
-  theme_plot() +
-  scale_fill_manual(values = c("grey40", "tomato2", "green4"), name = "") +
-  theme(plot.margin = unit(c(0, 0.4, 0.4, 0.4), "cm")) +
-  facet_wrap(~Category, ncol = 2, scales = "free") +
-  labs(y = bquote('Skillnad antal/'~km^2), x = "") +
-  geom_hline(yintercept = 0, linetype = 2, size = 0.4) +
-  NULL
-
-ggsave("figures/west_diff_violins.pdf", units = "cm", width = 20, height = 20)
-
-# Biomass
-ggplot(data = filter(year_diff2, name %in% c("2021-2013", "2021-2016", "2016-2013") & Unit == "Vikt"),
-             aes(x = factor(name, level = c("2021-2013", "2016-2013", "2021-2016")),
-                 value, fill = col_group)) +
-  geom_violin(alpha = 0.4, color = NA) +
-  geom_boxplot(fill = NA, width = 0.1, size = 0.5, color = "grey5",
-               outlier.shape = NA) +
-  scale_fill_manual(values = pal[c(6, 2)], name = "") +
-  theme_plot() +
-  scale_fill_manual(values = c("grey40", "tomato2", "green4"), name = "") +
-  theme(plot.margin = unit(c(0, 0.4, 0.4, 0.4), "cm")) +
-  facet_wrap(~Category, ncol = 2, scales = "free") +
-  labs(y = bquote('Skillnad kg/'~km^2), x = "") +
-  geom_hline(yintercept = 0, linetype = 2, size = 0.4) +
-  NULL
-
-ggsave("figures/supp/biomass_west_diff_violins.pdf", units = "cm", width = 20, height = 20)
-```
-
-```{r}
-knitr::knit_exit
-```
-
 

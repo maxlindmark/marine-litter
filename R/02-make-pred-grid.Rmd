@@ -41,6 +41,7 @@ source_url("https://raw.githubusercontent.com/maxlindmark/marine-litter/main/R/f
 ```{r}
 # Read west coast data
 litterw <- readr::read_csv("https://raw.githubusercontent.com/maxlindmark/marine-litter/main/data/west_coast_litter.csv")
+max(litterw$year)
 
 x <- litterw$X
 y <- litterw$Y
@@ -73,7 +74,7 @@ pred_grid <- expand.grid(
   year = unique(litterw$year)
   )
 
-ggplot(pred_grid %>% filter(year == 2019), aes(X, Y)) +
+ggplot(pred_grid |> filter(year == 2019), aes(X, Y)) +
   geom_point(size = 0.1) +
   theme_void() +
   coord_sf()
@@ -93,8 +94,8 @@ plot_map_west +
   NULL
 
 # Add lat and lon
-xy <- as.matrix(pred_grid %>% dplyr::select(X, Y) %>% mutate(X = X*1000, Y = Y*1000))
-v <- vect(xy, crs="+proj=utm +zone=33 +datum=WGS84  +units=m")
+xy <- as.matrix(pred_grid |> dplyr::select(X, Y) |> mutate(X = X*1000, Y = Y*1000))
+v <- vect(xy, crs="+proj=utm +zone=32 +datum=WGS84  +units=m")
 y <- project(v, "+proj=longlat +datum=WGS84")
 lonlat <- geom(y)[, c("x", "y")]
 
@@ -104,17 +105,18 @@ pred_grid$lat <- lonlat[, 2]
 ggplot(filter(pred_grid, year == 2017), aes(lon, lat)) + geom_point()
 
 # Add ocean area
-# https://stackoverflow.com/questions/34272309/extract-shapefile-value-to-point-with-r
-# https://gis.ices.dk/sf/
 shape <- shapefile("data/assessment_areas_marine_waters/ANSSE_assessmentareas_20181116.shp")
-plot(shape)
+
 shape2 <- spTransform(shape, crs("+proj=longlat +datum=WGS84 +no_defs"))
-plot(shape2)
 
 pts <- SpatialPoints(cbind(pred_grid$lon, pred_grid$lat), 
                      proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs"))
 
 pred_grid$area <- over(pts, shape2)$MarUnitID
+
+ggplot(filter(pred_grid, year == 2017), aes(lon, lat, color = area)) + geom_point()
+
+pred_grid <- pred_grid |> drop_na(area)
 
 ggplot(filter(pred_grid, year == 2017), aes(lon, lat, color = area)) + geom_point()
 
@@ -125,14 +127,14 @@ crs(dep_raster, proj = TRUE)
 
 plot(dep_raster)
 
-pred_grid$depth <- terra::extract(dep_raster, pred_grid %>% dplyr::select(lon, lat))$elevation
+pred_grid$depth <- terra::extract(dep_raster, pred_grid |> dplyr::select(lon, lat))$elevation
 
 ggplot(pred_grid, aes(lon, lat, color = depth*-1)) + 
   geom_point()
 
 pred_grid$depth <- pred_grid$depth*-1
 
-pred_grid <- pred_grid %>% drop_na(depth)
+pred_grid <- pred_grid |> drop_na(depth)
 
 plot_map_west + 
   theme_plot(base_size = 14) +
@@ -180,7 +182,7 @@ pred_grid <- expand.grid(
   year = unique(littere$year)
   )
 
-# ggplot(pred_grid %>% filter(year == 2019), aes(X, Y)) +
+# ggplot(pred_grid |> filter(year == 2019), aes(X, Y)) +
 #   geom_point(size = 0.1) +
 #   theme_void() +
 #   coord_sf()
@@ -200,7 +202,7 @@ pred_grid <- as.data.frame(pred_grid)
 #   NULL
 
 # Add lat and lon
-xy <- as.matrix(pred_grid %>% dplyr::select(X, Y) %>% mutate(X = X*1000, Y = Y*1000))
+xy <- as.matrix(pred_grid |> dplyr::select(X, Y) |> mutate(X = X*1000, Y = Y*1000))
 v <- vect(xy, crs="+proj=utm +zone=33 +datum=WGS84  +units=m")
 y <- project(v, "+proj=longlat +datum=WGS84")
 lonlat <- geom(y)[, c("x", "y")]
@@ -214,14 +216,15 @@ ggplot(filter(pred_grid, year == 2017), aes(lon, lat)) + geom_point()
 # https://stackoverflow.com/questions/34272309/extract-shapefile-value-to-point-with-r
 # https://gis.ices.dk/sf/
 shape <- shapefile("data/assessment_areas_marine_waters/BALSE_assessmentareas_20181116.shp")
-#plot(shape)
+
 shape2 <- spTransform(shape, crs("+proj=longlat +datum=WGS84 +no_defs"))
-#plot(shape2)
 
 pts <- SpatialPoints(cbind(pred_grid$lon, pred_grid$lat), 
                      proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs"))
 
 pred_grid$area <- over(pts, shape2)$MarUnitID
+
+pred_grid <- pred_grid |> drop_na(area)
 
 ggplot(filter(pred_grid, year == 2017), aes(lon, lat, color = area)) + geom_point()
 
@@ -232,14 +235,14 @@ crs(dep_raster, proj = TRUE)
 
 plot(dep_raster)
 
-pred_grid$depth <- terra::extract(dep_raster, pred_grid %>% dplyr::select(lon, lat))$elevation
+pred_grid$depth <- terra::extract(dep_raster, pred_grid |> dplyr::select(lon, lat))$elevation
 
 ggplot(pred_grid, aes(lon, lat, color = depth*-1)) + 
   geom_point()
 
 pred_grid$depth <- pred_grid$depth*-1
 
-pred_grid <- pred_grid %>% drop_na(depth)
+pred_grid <- pred_grid |> drop_na(depth)
 
 plot_map_east + 
   theme_plot(base_size = 14) +
@@ -249,3 +252,4 @@ plot_map_east +
 # Save
 write_csv(pred_grid, "data/pred_grid_east.csv")
 ```
+
