@@ -351,7 +351,7 @@ display: none;
 
 <h1 class="title toc-ignore">Plot models</h1>
 <h4 class="author">Max Lindmark</h4>
-<h4 class="date">24 March, 2025</h4>
+<h4 class="date">31 March, 2025</h4>
 
 </div>
 
@@ -592,7 +592,7 @@ for(i in unique(sims$id)){
   p &lt;- predict(m, newdata = nd, se_fit = TRUE) |&gt; 
     mutate(upr = est + 1.96*est_se,
            lwr = est - 1.96*est_se,
-           tp = &quot;2023-2024&quot;,
+           tp = &quot;2013-2024&quot;,
            sig = ifelse((tidy(m)$conf.low[2] &gt; 0 &amp; tidy(m)$conf.high[2] &gt; 0) | (tidy(m)$conf.low[2] &lt; 0 &amp; tidy(m)$conf.high[2] &lt; 0),
                         &quot;J&quot;, &quot;N&quot;))
   

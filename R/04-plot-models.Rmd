@@ -156,7 +156,7 @@ for(i in unique(sims$id)){
   p <- predict(m, newdata = nd, se_fit = TRUE) |> 
     mutate(upr = est + 1.96*est_se,
            lwr = est - 1.96*est_se,
-           tp = "2023-2024",
+           tp = "2013-2024",
            sig = ifelse((tidy(m)$conf.low[2] > 0 & tidy(m)$conf.high[2] > 0) | (tidy(m)$conf.low[2] < 0 & tidy(m)$conf.high[2] < 0),
                         "J", "N"))
   
